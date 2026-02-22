@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+venv/
+env/
+.env
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Version Control
+.git/
+.gitignore
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Documentation
+README.md
+LICENSE
+*.md
+
+# Assets (if not needed in container)
+assets/
+
+# Development files
+integration_examples.py
+
+# WhatsApp service (has its own container)
+whatsapp-service/

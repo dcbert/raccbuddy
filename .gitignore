@@ -1,0 +1,48 @@
+# Python
+venv/
+__pycache__/
+.env
+.pytest_cache/
+.ruff_cache/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+*.egg
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Database
+*.db
+*.sqlite3
+
+# Docker
+.wwebjs_auth/
+.wwebjs_cache/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Coverage
+.coverage
+htmlcov/
+.tox/
+
+# MyPy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Node (whatsapp-service)
+node_modules/

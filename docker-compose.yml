@@ -1,0 +1,64 @@
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: raccbuddy
+      POSTGRES_PASSWORD: raccbuddy
+      POSTGRES_DB: raccbuddy
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  app:
+    build: .
+    # ports:
+    #   - "8000:8000"
+    environment:
+      # Required: Set your Telegram bot token
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - OWNER_TELEGRAM_ID=${OWNER_TELEGRAM_ID:-0}
+
+      # WhatsApp
+      - OWNER_WHATSAPP_NUMBER=${OWNER_WHATSAPP_NUMBER:-}
+
+      # Database
+      - DATABASE_URL=postgresql+asyncpg://raccbuddy:raccbuddy@db:5432/raccbuddy
+
+      # LLM Configuration
+      - LLM_PROVIDER=${LLM_PROVIDER:-ollama}
+      - EMBEDDING_PROVIDER=${EMBEDDING_PROVIDER:-ollama}
+
+      # Ollama (use host.docker.internal to reach host machine's Ollama)
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3.2:3b}
+      - OLLAMA_EMBED_MODEL=${OLLAMA_EMBED_MODEL:-nomic-embed-text}
+
+      # xAI (optional)
+      - XAI_API_KEY=${XAI_API_KEY:-}
+      - XAI_MODEL=${XAI_MODEL:-grok-4-1-fast-reasoning}
+
+      # Optional settings
+      - MAX_CONTEXT_TOKENS=${MAX_CONTEXT_TOKENS:-2000}
+      - NUDGE_CHECK_INTERVAL_MINUTES=${NUDGE_CHECK_INTERVAL_MINUTES:-60}
+      - OWNER_MEMORY_RETENTION_DAYS=${OWNER_MEMORY_RETENTION_DAYS:-90}
+    depends_on:
+      - db
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  whatsapp:
+    build: ./whatsapp-service
+    environment:
+      - PORT=3001
+      - PYTHON_CORE_URL=http://app:8000
+    volumes:
+      - wa-session:/app/.wwebjs_auth
+    depends_on:
+      - db
+      - app
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  wa-session:
