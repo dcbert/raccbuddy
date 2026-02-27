@@ -2,7 +2,14 @@
 
 Runs the Telegram bot and the REST API (FastAPI) concurrently so that
 external bridges (WhatsApp, etc.) can push messages into the core.
+
+Lifecycle
+---------
+1. ``post_init``   — DB init, skill/plugin loading, job scheduling.
+2. ``post_shutdown`` — Flush all dirty state to DB, teardown plugins.
 """
+
+from __future__ import annotations
 
 import logging
 import threading
@@ -15,8 +22,9 @@ from src.core.config import settings
 from src.core.db import init_db
 from src.core.memory import memory
 from src.core.nudges import run_nudge_skills
-from src.core.plugin_loader import load_user_plugins, register_all_with_app
+from src.core.plugin_loader import load_user_plugins, register_all_with_app, teardown_all_plugins
 from src.core.scheduled import restore_pending_jobs, set_app_reference
+from src.core.skills.base import load_cooldowns_from_db
 from src.core.skills.loader import load_all_user_skills
 from src.core.state import flush_all_dirty, load_all_states
 from src.handlers.chat import analyze_handler, chat_handler, contacts_handler, insights_handler, name_handler, relationship_handler, skills_handler
@@ -29,6 +37,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Suppress INFO logs from Telegram library (keep only WARNING and above)
+logging.getLogger("telegram").setLevel(logging.WARNING)
+logging.getLogger("httpx").setLevel(logging.WARNING)  # Telegram uses httpx for API calls
+
 
 async def post_init(application: Application) -> None:
     """Initialize database and schedule background jobs after startup."""
@@ -38,6 +50,11 @@ async def post_init(application: Application) -> None:
 
     # Restore persistent state from DB
     await load_all_states()
+
+    # Restore nudge cooldowns so nudges don't spam immediately after restart
+    loaded_cooldowns = await load_cooldowns_from_db()
+    if loaded_cooldowns:
+        logger.info("Restored %d nudge cooldown(s) from DB", loaded_cooldowns)
 
     # Load user-provided nudge and chat skills from nudges/ and skills/
     loaded = load_all_user_skills()
@@ -114,6 +131,24 @@ async def state_flush_job(context: ContextTypes.DEFAULT_TYPE) -> None:
         logger.warning("State flush job failed", exc_info=True)
 
 
+async def post_shutdown(application: Application) -> None:
+    """Flush all state and teardown plugins on graceful shutdown (SIGTERM)."""
+    logger.info("RaccBuddy shutting down — flushing state and tearing down plugins…")
+    try:
+        await flush_all_dirty()
+        logger.info("All dirty state flushed to DB")
+    except Exception:
+        logger.warning("State flush on shutdown failed", exc_info=True)
+
+    try:
+        await teardown_all_plugins()
+        logger.info("All plugins torn down")
+    except Exception:
+        logger.warning("Plugin teardown on shutdown failed", exc_info=True)
+
+    logger.info("RaccBuddy shutdown complete 🦝")
+
+
 def _start_api_server() -> None:
     """Run the FastAPI server in a background thread.
 
@@ -143,6 +178,7 @@ def main() -> None:
         Application.builder()
         .token(settings.telegram_bot_token)
         .post_init(post_init)
+        .post_shutdown(post_shutdown)
         .build()
     )
 

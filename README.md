@@ -21,6 +21,7 @@
 - [Quick Start](#quick-start)
 - [Usage](#usage)
 - [Troubleshooting](#troubleshooting)
+- [Deployment to Production](#deployment-to-production)
 - [Platform Integrations](#platform-integrations)
 - [Skills & Extensibility](#skills--extensibility)
 - [Tech Stack](#tech-stack)
@@ -40,7 +41,7 @@
 
 **Privacy First**: Everything runs locally on your machine — no cloud services, no data leaks, complete control over your personal data.
 
-**Smart & Efficient**: Uses semantic embeddings (pgvector) to keep context under ~2,000 tokens, ensuring fast responses and low resource usage.
+**Smart & Efficient**: Uses a layered `ContextBuilder` + pgvector semantic search to assemble up to 30,000 tokens of relevant context, delivering coherent, deeply personalised responses.
 
 **Proactive Care**: Sends personalized nudges based on your habits and relationship patterns — helps you stay connected with those who matter.
 
@@ -54,7 +55,7 @@
 - **Smart Memory System**: Uses pgvector semantic search to retrieve relevant context efficiently
 - **Multi-LLM Support**: Works with local Ollama models (llama3.2, qwen2.5) or cloud providers (xAI Grok)
 - **Function Calling**: Advanced LLM providers can call tools autonomously (analyze contacts, get insights, schedule messages)
-- **Token-Efficient**: Automatic context management keeps LLM queries under 2,000 tokens
+- **ContextBuilder**: A layered, token-budgeted context assembly pipeline (30,000 token default, fully configurable)
 
 ### 💬 Platform Support
 - **Telegram Bot**: Full-featured bot with inline commands and natural conversation
@@ -420,6 +421,144 @@ docker compose up whatsapp
 
 ---
 
+## Deployment to Production
+
+### Deploying to Umbrel or Remote Servers
+
+RaccBuddy includes automated scripts for deploying to production environments like Umbrel home servers.
+
+#### Step 1: Build and Push to Docker Hub
+
+On your development machine (Apple Silicon or any platform):
+
+```bash
+# Set your Docker Hub username
+export DOCKER_USERNAME=your-dockerhub-username
+
+# Run the deployment script
+./deploy-to-dockerhub.sh
+```
+
+This script will:
+- Build multi-platform Docker images (linux/amd64, linux/arm64)
+- Push images to Docker Hub
+- Dump your PostgreSQL database
+- Backup your WhatsApp session (to avoid re-scanning QR)
+- Create a ready-to-use `docker-compose.yml` with your image references
+- Save everything to `./backups/YYYYMMDD_HHMMSS/`
+
+#### Step 2: Deploy on Umbrel
+
+1. **Copy the backup directory** to your Umbrel:
+   ```bash
+   scp -r backups/20260223_120000/ umbrel@umbrel.local:~/raccbuddy/
+   ```
+
+2. **On your Umbrel**, navigate to the backup directory:
+   ```bash
+   cd ~/raccbuddy/backups/20260223_120000/
+   ```
+
+3. **Create a `.env` file** with your secrets:
+   ```bash
+   cat > .env << EOF
+   TELEGRAM_BOT_TOKEN=your-bot-token
+   OWNER_TELEGRAM_ID=your-telegram-id
+   OWNER_WHATSAPP_NUMBER=your-whatsapp-number
+   EOF
+   ```
+
+4. **Start the services** (uses the docker-compose.yml from backup):
+   ```bash
+   docker compose up -d
+   ```
+
+5. **Restore your data**:
+   ```bash
+   # Wait for containers to be ready (30 seconds)
+   sleep 30
+
+   # Run the restore script
+   ../../../restore-from-backup.sh .
+   ```
+
+#### Manual Restore (Alternative)
+
+If you prefer to restore manually:
+
+```bash
+# Restore database
+gunzip -c database.sql.gz | docker compose exec -T db psql -U raccbuddy raccbuddy
+
+# Restore WhatsApp session (optional, to avoid re-scanning QR)
+docker run --rm \
+  -v raccbuddy_wa-session:/data \
+  -v $(pwd):/backup \
+  alpine sh -c "cd /data && tar xzf /backup/whatsapp-session.tar.gz"
+
+# Restart services
+docker compose restart
+```
+
+#### Using Pre-built Images Without Backup
+
+If you just want to pull and use the latest images:
+
+1. Update your `docker-compose.yml`:
+   ```yaml
+   app:
+     image: your-dockerhub-username/raccbuddy-app:latest
+     # Remove the 'build: .' line
+
+   whatsapp:
+     image: your-dockerhub-username/raccbuddy-whatsapp:latest
+     # Remove the 'build: ./whatsapp-service' line
+   ```
+
+2. Start normally:
+   ```bash
+   docker compose up -d
+   ```
+
+#### Environment Variables for Production
+
+For production deployments, consider these additional settings:
+
+```dotenv
+# Production database (if using external PostgreSQL)
+DATABASE_URL=postgresql+asyncpg://user:pass@db-host:5432/raccbuddy
+
+# Use xAI with function calling for better results
+LLM_PROVIDER=xai
+XAI_API_KEY=your-xai-api-key
+
+# Or use Ollama on Umbrel (if installed)
+OLLAMA_BASE_URL=http://umbrel.local:11434
+
+# Increase memory retention
+OWNER_MEMORY_RETENTION_DAYS=365
+
+# More frequent nudges
+NUDGE_CHECK_INTERVAL_MINUTES=30
+```
+
+#### Updating Deployed Images
+
+To update your deployment with new code:
+
+1. Rebuild and push on your dev machine:
+   ```bash
+   ./deploy-to-dockerhub.sh
+   ```
+
+2. On your server, pull latest and restart:
+   ```bash
+   docker compose pull
+   docker compose up -d
+   ```
+
+---
+
 ## Platform Integrations
 
 ### Telegram (Built-in)
@@ -457,11 +596,13 @@ See [whatsapp-service/README.md](whatsapp-service/README.md) for details.
 
 ### Adding More Platforms
 
-Create a bridge that POSTs to the REST API:
+Create a bridge that POSTs to the REST API.  When `API_SECRET_KEY` is set,
+include the key in every request:
 
 ```bash
 POST /api/messages
 Content-Type: application/json
+X-API-Key: your-api-secret-key
 
 {
   "platform": "your_platform",
@@ -593,7 +734,8 @@ raccbuddy/
 │   │   │       ├── ollama.py     # Ollama provider
 │   │   │       └── xai.py        # xAI/Grok provider
 │   │   ├── memory/
-│   │   │   └── base.py           # Context building & retrieval
+│   │   │   ├── base.py           # PostgreSQL memory backend (pgvector)
+│   │   │   └── context_builder.py # Layered, token-budgeted context assembly
 │   │   ├── nudges/
 │   │   │   └── engine.py         # Nudge execution engine
 │   │   ├── relationship/
@@ -647,6 +789,14 @@ raccbuddy/
 
 Receive messages from external platform bridges.
 
+**Authentication:** When `API_SECRET_KEY` is set in `.env`, all requests must include an `X-API-Key` header matching the configured secret. Requests without the correct key receive `403 Forbidden`. Leave `API_SECRET_KEY` empty to disable auth (local/LAN use only).
+
+**Headers:**
+```
+X-API-Key: your-api-secret-key
+Content-Type: application/json
+```
+
 **Request Body:**
 ```json
 {
@@ -696,16 +846,23 @@ Available when using advanced providers (xAI):
 | `OLLAMA_MODEL` | `llama3.2:3b` | Model for text generation |
 | `OLLAMA_EMBED_MODEL` | `nomic-embed-text` | Model for embeddings |
 | `XAI_API_KEY` | *(optional)* | xAI API key (if using xAI) |
-| `XAI_MODEL` | `grok-beta` | xAI model name |
-| `MAX_CONTEXT_TOKENS` | `2000` | Maximum LLM context size |
+| `XAI_MODEL` | `grok-3-mini` | xAI model name |
+| `MAX_CONTEXT_TOKENS` | `30000` | Maximum LLM context size (Ollama KV-cache + input budget) |
+| `EMBED_DIMENSIONS` | `768` | Embedding vector dimensions (must match embed model) |
+| `API_SECRET_KEY` | *(empty)* | X-API-Key secret for `POST /api/messages`; leave empty to disable auth |
 | `MAX_SUMMARY_WORDS` | `150` | Summary length limit |
 | `NUDGE_CHECK_INTERVAL_MINUTES` | `60` | How often to check for nudges |
 | `SENTIMENT_MODEL` | `llama3.2:3b` | Model used for mood classification |
+| `MEMORY_RECENT_MESSAGES` | `15` | Number of recent messages included in every context window |
+| `MEMORY_SEMANTIC_CHUNKS` | `6` | pgvector semantic chunks retrieved per query |
+| `MEMORY_MAX_SUMMARIES` | `3` | Past daily summaries included in context |
 | `REL_WEIGHT_FREQUENCY` | `0.30` | Weight for message frequency in relationship scoring |
 | `REL_WEIGHT_RECENCY` | `0.30` | Weight for recency in relationship scoring |
 | `REL_WEIGHT_SENTIMENT` | `0.25` | Weight for sentiment in relationship scoring |
 | `REL_WEIGHT_REPLY_RATE` | `0.15` | Weight for reply rate in relationship scoring |
 | `OWNER_MEMORY_RETENTION_DAYS` | `90` | Days before low-importance memories are pruned |
+| `DB_POOL_SIZE` | `10` | SQLAlchemy connection pool size |
+| `DB_MAX_OVERFLOW` | `20` | Maximum overflow connections |
 
 ### Recommended Ollama Models
 
@@ -724,7 +881,7 @@ Available when using advanced providers (xAI):
 ### General Questions
 
 **Q: Is RaccBuddy really private?**
-A: Yes! By default, everything runs locally on your machine. Messages, relationships, and habits stay in your local PostgreSQL database. If you use Ollama (default), even LLM inference happens locally. Only if you choose to use xAI does data leave your machine (and only the current conversation context, max 2000 tokens).
+A: Yes! By default, everything runs locally on your machine. Messages, relationships, and habits stay in your local PostgreSQL database. If you use Ollama (default), even LLM inference happens locally. Only if you choose to use xAI does data leave your machine (and only the conversation context assembled by ContextBuilder — never raw message archives or relationship data).
 
 **Q: How much does it cost to run?**
 A: RaccBuddy is free and open source. If using local Ollama, there are zero ongoing costs (just electricity). If you opt for xAI Grok, you'll pay xAI's API rates.
@@ -779,12 +936,13 @@ cat backup.sql | docker exec -i $(docker ps -qf "name=raccbuddy-db") psql -U rac
 **Q: Can I use OpenAI or Anthropic instead of Ollama/xAI?**
 A: Not built-in yet, but it's easy to add! Check `src/core/llm/providers/` and implement a new provider following the base interface. PRs welcome!
 
-**Q: How does the context stay under 2000 tokens?**
-A: RaccBuddy uses:
-1. **Semantic search** with pgvector to retrieve only relevant past messages
-2. **Automatic summarization** of old conversations
-3. **Smart truncation** of retrieved context
-4. **Embedding deduplication** to avoid storing similar memories multiple times
+**Q: How does RaccBuddy manage context size?**
+A: RaccBuddy uses the `ContextBuilder` pipeline, which assembles up to 30,000 tokens (configurable) from multiple layers:
+1. **Recent messages** — last N messages for immediate conversational continuity
+2. **Semantic search** — pgvector retrieves only the most relevant past chunks
+3. **Daily summaries** — compressed long-term memory without raw message bloat
+4. **Owner personal facts** — deduplicated self-knowledge about the user
+5. **Token budgeting** — each layer has a configured fraction of the total budget, preventing runaway context growth
 
 ### Privacy & Security
 
@@ -807,9 +965,9 @@ A: Yes, Telegram delivers messages to your bot. If privacy is critical, consider
 **Q: What's sent to xAI if I use that provider?**
 A: Only:
 - System prompt (Raccy's personality)
-- Current conversation context (retrieved from database, max 2000 tokens)
+- Current conversation context assembled by ContextBuilder (up to `MAX_CONTEXT_TOKENS`, default 30,000 — a budget-controlled subset of your data)
 - Tool schemas (function definitions)
-Never: full message history, embeddings, or relationship data.
+Never: full raw message history, raw embeddings, or relationship tables.
 
 ### Extending & Customizing
 
@@ -868,9 +1026,9 @@ RaccBuddy is built with **privacy as the foundation**:
 
 ### ☁️ Optional Cloud Services
 If you choose to use `LLM_PROVIDER=xai`:
-- Only the **current conversation context** (max 2000 tokens) is sent to xAI
-- No historical data, no message archives, no relationship data
-- You control what's shared via environment variables
+- Only the **ContextBuilder-assembled context** (up to `MAX_CONTEXT_TOKENS`, default 30,000 — a token-budgeted subset) is sent to xAI
+- No raw message archives, no raw embeddings, no relationship tables
+- You control what's shared via environment variables and budget ratios
 
 ### 🛡️ Security Best Practices
 - **Never commit `.env`** to version control (already in `.gitignore`)
@@ -951,7 +1109,7 @@ We welcome contributions! Here's how:
 - **Use `async/await`** for I/O operations
 - **Follow black + ruff** formatting (run `black . && ruff check .`)
 - **Write tests** for new features (see `tests/` folder)
-- **Keep LLM context under 2000 tokens** (use summaries + retrieval)
+- **Use `ContextBuilder`** for all LLM calls — never build prompts manually (uses summaries + semantic retrieval + token budgets)
 - **Document your code** with clear docstrings
 
 ### Commit Message Format

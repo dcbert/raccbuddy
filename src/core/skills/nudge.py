@@ -182,7 +182,7 @@ class HabitSkill(BaseNudgeSkill):
         return 60 * 6
 
     async def should_fire(self, owner_id: int) -> NudgeCheck:
-        habits = await get_all_habits()
+        habits = await get_all_habits(owner_id=owner_id)
         if not habits:
             return NudgeCheck(fire=False, reason="No habits detected")
 

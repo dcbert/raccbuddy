@@ -15,7 +15,12 @@ stored in PostgreSQL (with pgvector for semantic retrieval):
 
 Token efficiency
 ~~~~~~~~~~~~~~~~
-Every retrieval path enforces ``MAX_CONTEXT_TOKENS`` (default 2 000).
+Every retrieval path respects ``settings.max_context_tokens``
+(default 30 000).  Budget fractions and retrieval limits are all
+driven by ``settings.memory_*`` config keys.
+
+Context assembly is delegated to ``ContextBuilder`` in
+``src/core/memory/context_builder.py`` for clean separation of concerns.
 
 Privacy
 ~~~~~~~
@@ -44,19 +49,21 @@ logger = logging.getLogger(__name__)
 # Constants
 # ---------------------------------------------------------------------------
 
-EMBED_DIMENSIONS = 768
+# Approximate characters per token — used to convert token budgets to char
+# limits for safe string slicing without a full tokeniser.
+CHARS_PER_TOKEN: int = 4
 
-MAX_RECENT_MESSAGES = 5
-MAX_SUMMARIES = 3
-CHARS_PER_TOKEN = 4
-MAX_CONTEXT_CHARS = settings.max_context_tokens * CHARS_PER_TOKEN
+OWNER_MEMORY_DEFAULT_IMPORTANCE: int = 8
+OWNER_MEMORY_PRUNE_FLOOR: int = 7
 
-_OWNER_MEM_BUDGET = 0.30
-_CONTACT_MEM_BUDGET = 0.30
-_EPISODIC_BUDGET = 0.40
 
-OWNER_MEMORY_DEFAULT_IMPORTANCE = 8
-OWNER_MEMORY_PRUNE_FLOOR = 7
+def _context_budget_chars(max_tokens: int | None = None) -> int:
+    """Return the character budget for the full context window.
+
+    Computed dynamically from ``settings.max_context_tokens`` so changes
+    to the config are reflected without a restart.
+    """
+    return (max_tokens or settings.max_context_tokens) * CHARS_PER_TOKEN
 
 
 # ---------------------------------------------------------------------------
@@ -398,24 +405,53 @@ class PostgresMemory:
         self,
         owner_id: int,
         *,
-        k: int = 15,
+        query: str | None = None,
+        k: int = 8,
     ) -> str:
-        """Return formatted owner facts for prompt injection."""
-        budget = int(MAX_CONTEXT_CHARS * _OWNER_MEM_BUDGET)
+        """Return formatted owner facts for prompt injection.
+
+        When *query* is provided, facts are ranked by semantic similarity
+        to the query so only relevant knowledge is surfaced. Without a
+        query, falls back to importance + recency ordering.
+        """
+        budget = int(_context_budget_chars() * settings.memory_owner_budget_ratio)
 
         async with get_session() as session:
-            stmt = (
-                select(OwnerMemory.content, OwnerMemory.category, OwnerMemory.importance)
-                .where(OwnerMemory.owner_id == owner_id)
-                .order_by(desc(OwnerMemory.importance), desc(OwnerMemory.created_at))
-                .limit(k)
-            )
+            if query:
+                try:
+                    query_emb = await embed(query[:512])
+                    relevance = (
+                        1 - OwnerMemory.embedding.cosine_distance(query_emb)
+                    ).label("relevance")
+                    stmt = (
+                        select(
+                            OwnerMemory.content,
+                            OwnerMemory.category,
+                            OwnerMemory.importance,
+                            relevance,
+                        )
+                        .where(OwnerMemory.owner_id == owner_id)
+                        .order_by(desc(relevance))
+                        .limit(k)
+                    )
+                except Exception:
+                    logger.warning("Owner facts vector search failed, falling back")
+                    query = None  # fall through to importance ordering
+
+            if not query:
+                stmt = (
+                    select(OwnerMemory.content, OwnerMemory.category, OwnerMemory.importance)
+                    .where(OwnerMemory.owner_id == owner_id)
+                    .order_by(desc(OwnerMemory.importance), desc(OwnerMemory.created_at))
+                    .limit(k)
+                )
+
             rows = (await session.execute(stmt)).all()
 
         if not rows:
             return ""
 
-        lines = ["[What Raccy knows about you]"]
+        lines = ["[Background knowledge about you — use only if relevant to the question]"]
         used = len(lines[0])
         for row in rows:
             line = f"- ({row.category}) {row.content}"
@@ -439,11 +475,11 @@ class PostgresMemory:
         max_tokens: int | None = None,
     ) -> str:
         """Build a token-budgeted context string for the LLM prompt."""
-        budget_chars = (max_tokens or settings.max_context_tokens) * CHARS_PER_TOKEN
+        budget_chars = _context_budget_chars(max_tokens)
         parts: list[str] = []
 
-        # 1. Owner self-memory
-        owner_facts = await self.get_owner_personal_facts(owner_id)
+        # 1. Owner self-memory (query-aware retrieval)
+        owner_facts = await self.get_owner_personal_facts(owner_id, query=query)
         if owner_facts:
             parts.append(owner_facts)
 
@@ -467,20 +503,20 @@ class PostgresMemory:
         contacts = await get_all_contacts_all_platforms(owner_id)
         if contacts:
             names = ", ".join(c.contact_name for c in contacts[:10])
-            parts.append(f"[Known contacts: {names}]")
+            parts.append(f"[Known contacts (reference only): {names}]")
 
         # 3. Semantic memories (hybrid search)
-        contact_budget = int(budget_chars * _CONTACT_MEM_BUDGET)
+        contact_budget = int(budget_chars * settings.memory_contact_budget_ratio)
         if contact_id is not None:
             try:
                 docs = await self.hybrid_search(
                     query, owner_id,
                     contact_id=contact_id,
-                    k=5,
+                    k=settings.memory_semantic_chunks,
                     include_owner_memories=False,
                 )
                 if docs:
-                    mem_lines = ["[Relevant memories]"]
+                    mem_lines = ["[Relevant memories — reference only when pertinent]"]
                     used = 0
                     for doc in docs:
                         line = f"- {doc.content[:300]}"
@@ -497,7 +533,7 @@ class PostgresMemory:
             try:
                 query_embedding = await embed(query[:512])
                 summaries = await get_relevant_summaries(
-                    contact_id, query_embedding, limit=MAX_SUMMARIES,
+                    contact_id, query_embedding, limit=settings.memory_max_summaries,
                 )
                 if summaries:
                     parts.append("[Relevant history]")
@@ -509,11 +545,11 @@ class PostgresMemory:
         # 5. Recent episodic messages
         if contact_id is not None:
             messages = await get_recent_messages_for_contact(
-                contact_id, limit=MAX_RECENT_MESSAGES,
+                contact_id, limit=settings.memory_recent_messages,
             )
         else:
             messages = await get_recent_messages(
-                owner_id, limit=MAX_RECENT_MESSAGES,
+                owner_id, limit=settings.memory_recent_messages,
             )
 
         if messages:

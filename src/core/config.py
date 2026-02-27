@@ -1,62 +1,132 @@
 """Application configuration via environment variables."""
 
+from __future__ import annotations
+
 from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    """RaccBuddy configuration loaded from environment."""
+    """RaccBuddy configuration loaded from environment.
 
+    All values can be overridden via environment variables or a ``.env``
+    file in the project root.  Names are case-insensitive.
+    """
+
+    # ------------------------------------------------------------------ #
     # Telegram
+    # ------------------------------------------------------------------ #
     telegram_bot_token: str = ""
     owner_telegram_id: int = 0  # Set after first /start to lock the bot
 
-    # WhatsApp
+    # ------------------------------------------------------------------ #
+    # WhatsApp bridge
+    # ------------------------------------------------------------------ #
     owner_whatsapp_number: str = ""  # Owner's WhatsApp number for recognition
 
+    # ------------------------------------------------------------------ #
     # Database
+    # ------------------------------------------------------------------ #
     database_url: str = (
         "postgresql+asyncpg://raccbuddy:raccbuddy@localhost:5432/raccbuddy"
     )
+    # Async SQLAlchemy connection pool
+    db_pool_size: int = 10
+    db_max_overflow: int = 20
+    db_pool_timeout: int = 30
 
+    # ------------------------------------------------------------------ #
     # LLM provider selection ("ollama", "xai", …)
+    # ------------------------------------------------------------------ #
     llm_provider: str = "ollama"
 
     # Embedding provider selection ("ollama", "xai", …)
     # Default to ollama for embeddings regardless of main LLM provider
     embedding_provider: str = "ollama"
 
+    # ------------------------------------------------------------------ #
     # Ollama
+    # ------------------------------------------------------------------ #
     ollama_base_url: str = "http://localhost:11434"
     ollama_model: str = "llama3.2:3b"
     ollama_embed_model: str = "nomic-embed-text"
 
+    # ------------------------------------------------------------------ #
     # xAI (Grok)
+    # ------------------------------------------------------------------ #
     xai_api_key: str = ""
     xai_model: str = "grok-3-mini"
-    xai_embed_model: str = "v1"
+    xai_embed_model: str = "v1"  # Replace with actual xAI embed model name (check xAI docs)
     xai_embed_dimensions: int = 768
 
-    # Token limits
-    max_context_tokens: int = 2000
+    # ------------------------------------------------------------------ #
+    # Context / Token limits
+    # ------------------------------------------------------------------ #
+    # How many tokens Ollama/xAI may use for the *full* context window.
+    # Ollama receives this value as ``num_ctx`` so its KV-cache is sized
+    # correctly.  Hard-limit for input = max_context_tokens - 1000
+    # (1000 reserved for generation).
+    max_context_tokens: int = 30_000
+
+    # Embedding vector dimensions (must match the embed model output)
+    embed_dimensions: int = 768
+
+    # Max words per daily contact summary
     max_summary_words: int = 150
 
-    # REST API
-    api_port: int = 8000
+    # ------------------------------------------------------------------ #
+    # Context builder tuning
+    # ------------------------------------------------------------------ #
+    # How many recent messages to include in every context window
+    memory_recent_messages: int = 15
+    # How many recent user↔bot conversation turns to include (each message = 1 turn)
+    memory_conversation_turns: int = 10
+    # How many semantic memory chunks to retrieve via pgvector
+    memory_semantic_chunks: int = 6
+    # How many past summaries to include
+    memory_max_summaries: int = 3
+    # Fraction of context budget allocated to owner self-memory
+    memory_owner_budget_ratio: float = 0.20
+    # Fraction of context budget allocated to contact semantic memories
+    memory_contact_budget_ratio: float = 0.30
+    # Minimum cosine similarity for owner memory inclusion
+    memory_min_owner_relevance: float = 0.35
 
+    # ------------------------------------------------------------------ #
+    # REST API
+    # ------------------------------------------------------------------ #
+    api_port: int = 8000
+    # Secret key for X-API-Key header on /api/messages.
+    # Generate with: python -c "import secrets; print(secrets.token_hex(32))"
+    # Leave empty to disable auth (not recommended for production).
+    api_secret_key: str = ""
+
+    # ------------------------------------------------------------------ #
     # Nudges
+    # ------------------------------------------------------------------ #
     nudge_check_interval_minutes: int = 60
 
+    # ------------------------------------------------------------------ #
     # Memory retention
+    # ------------------------------------------------------------------ #
     owner_memory_retention_days: int = 90
 
+    # ------------------------------------------------------------------ #
     # Sentiment / mood model (Ollama)
+    # ------------------------------------------------------------------ #
     sentiment_model: str = "llama3.2:3b"
 
-    # Relationship scoring weights
+    # ------------------------------------------------------------------ #
+    # Relationship scoring weights  (must sum to 1.0)
+    # ------------------------------------------------------------------ #
     rel_weight_frequency: float = 0.30
     rel_weight_recency: float = 0.30
     rel_weight_sentiment: float = 0.25
     rel_weight_reply_rate: float = 0.15
+
+    # ------------------------------------------------------------------ #
+    # Tool calling
+    # ------------------------------------------------------------------ #
+    max_tool_rounds: int = 10
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 

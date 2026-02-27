@@ -25,6 +25,7 @@ async def save_message(
     chat_id: int,
     from_contact_id: int | None = None,
     text_content: str,
+    is_bot_reply: bool = False,
     timestamp: datetime.datetime | None = None,
 ) -> Message:
     """Persist a new chat message."""
@@ -33,6 +34,7 @@ async def save_message(
         chat_id=chat_id,
         from_contact_id=from_contact_id,
         text=text_content,
+        is_bot_reply=is_bot_reply,
         **({"timestamp": timestamp} if timestamp else {}),
     )
     async with get_session() as session:
@@ -53,6 +55,38 @@ async def get_recent_messages(
         stmt = stmt.where(Message.from_contact_id == from_contact_id)
     stmt = stmt.order_by(desc(Message.timestamp)).limit(limit)
 
+    async with get_session() as session:
+        result = await session.execute(stmt)
+        return list(reversed(result.scalars().all()))
+
+
+async def get_conversation_history(
+    chat_id: int,
+    *,
+    limit: int = 10,
+) -> list[Message]:
+    """Return the most recent user↔bot conversation turns for a chat.
+
+    Retrieves the last *limit* messages that are either owner messages
+    (``from_contact_id IS NULL``) or bot replies (``is_bot_reply = True``),
+    ordered chronologically (oldest first).
+
+    Args:
+        chat_id: The Telegram chat ID (usually the owner ID).
+        limit: Maximum number of turns to return.
+
+    Returns:
+        List of Message objects in chronological order.
+    """
+    stmt = (
+        select(Message)
+        .where(
+            Message.chat_id == chat_id,
+            Message.from_contact_id.is_(None),
+        )
+        .order_by(desc(Message.timestamp))
+        .limit(limit)
+    )
     async with get_session() as session:
         result = await session.execute(stmt)
         return list(reversed(result.scalars().all()))
@@ -407,10 +441,21 @@ async def upsert_relationship(
 # ---------------------------------------------------------------------------
 
 
-async def get_all_habits() -> list[Habit]:
-    """Return all persisted habits."""
+async def get_all_habits(owner_id: int | None = None) -> list[Habit]:
+    """Return persisted habits, optionally filtered by owner.
+
+    Args:
+        owner_id: If provided, return only habits belonging to this owner.
+                  Pass ``None`` to return all habits (admin / testing use).
+
+    Returns:
+        List of matching ``Habit`` rows.
+    """
     async with get_session() as session:
-        result = await session.execute(select(Habit))
+        stmt = select(Habit)
+        if owner_id is not None:
+            stmt = stmt.where(Habit.owner_id == owner_id)
+        result = await session.execute(stmt)
         return list(result.scalars().all())
 
 

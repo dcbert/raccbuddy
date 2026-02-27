@@ -227,22 +227,20 @@ async def _tool_analyze_contact(
 ) -> str:
     """Analyze relationship for a contact."""
     from src.core.db.crud import get_contact_by_name_any_platform, get_relationship
-    from src.core.memory.base import memory
+    from src.core.memory.context_builder import context_builder
 
     contact = await get_contact_by_name_any_platform(owner_id, contact_name)
     if not contact:
         return f"Contact '{contact_name}' not found."
 
-    ctx = await memory.get_relevant_context(
+    ctx = await context_builder.build(
         owner_id,
         contact.id,
         f"Analyze my relationship with {contact_name}",
     )
     rel = await get_relationship(contact.id)
     score = rel.score if rel else 50
-    return (
-        f"Context for {contact_name} (score {score}/100):\n{ctx}"
-    )
+    return f"Context for {contact_name} (score {score}/100):\n{ctx}"
 
 
 async def _tool_get_insights(
@@ -251,13 +249,13 @@ async def _tool_get_insights(
 ) -> str:
     """Get conversation insights for a contact."""
     from src.core.db.crud import get_contact_by_name_any_platform
-    from src.core.memory.base import memory
+    from src.core.memory.context_builder import context_builder
 
     contact = await get_contact_by_name_any_platform(owner_id, contact_name)
     if not contact:
         return f"Contact '{contact_name}' not found."
 
-    ctx = await memory.get_relevant_context(
+    ctx = await context_builder.build(
         owner_id,
         contact.id,
         f"Insights about {contact_name}",

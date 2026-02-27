@@ -12,8 +12,9 @@ from telegram.ext import ContextTypes
 from src.core.auth import reject_non_owner
 from src.core.config import settings
 from src.core.db import Contact, get_all_contacts_all_platforms, get_contact_by_name_any_platform, get_relationship, save_message, upsert_contact
-from src.core.llm import SYSTEM_PROMPT, generate, generate_with_tools, provider_supports_tools
+from src.core.llm import SYSTEM_PROMPT, generate, generate_chat, generate_with_tools, provider_supports_tools
 from src.core.memory import memory
+from src.core.memory.context_builder import context_builder
 from src.core.relationship import relationship_manager
 from src.core.sentiment import mood_analyzer
 from src.core.skills.base import get_registered_skills as get_registered_nudge_skills
@@ -106,19 +107,33 @@ async def chat_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         # Run chat-skill pre-processors
         text = await run_pre_processors(text, owner)
 
-        ctx = await memory.get_relevant_context(owner, contact_id, text)
+        system = _build_system_prompt()
 
         if provider_supports_tools():
+            ctx = await context_builder.build(owner, contact_id, text)
             reply = await _generate_with_tool_loop(ctx, text, owner)
         else:
-            # Extend system prompt with chat-skill fragments
-            system = _build_system_prompt()
-            reply = await generate(ctx, system=system)
+            # Use proper multi-turn messages for conversation coherence
+            messages = await context_builder.build_messages(
+                owner, contact_id, text, system,
+            )
+            reply = await generate_chat(messages)
 
         # Run chat-skill post-processors
         reply = await run_post_processors(reply, owner)
 
         await update.message.reply_text(reply)
+
+        # Persist bot reply for conversation history
+        try:
+            await save_message(
+                platform="telegram",
+                chat_id=chat_id,
+                text_content=reply,
+                is_bot_reply=True,
+            )
+        except Exception:
+            logger.warning("Failed to save bot reply", exc_info=True)
     except Exception:
         logger.exception("Failed to generate reply for user %d", user_id)
         await update.message.reply_text(
@@ -276,7 +291,7 @@ async def analyze_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         return
 
     try:
-        ctx = await memory.get_relevant_context(
+        ctx = await context_builder.build(
             owner,
             contact.id,
             f"Analyze my relationship with {name}",
@@ -321,7 +336,7 @@ async def insights_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         return
 
     try:
-        ctx = await memory.get_relevant_context(
+        ctx = await context_builder.build(
             owner,
             contact.id,
             f"Insights about {name}",
@@ -402,7 +417,6 @@ async def contacts_handler(
 # -------------------------------------------------------------------
 # Tool-calling loop for advanced providers
 # -------------------------------------------------------------------
-MAX_TOOL_ROUNDS = 10
 
 
 async def _generate_with_tool_loop(
@@ -431,7 +445,7 @@ async def _generate_with_tool_loop(
 
     all_tools = get_all_tool_schemas()
 
-    for _round in range(MAX_TOOL_ROUNDS):
+    for _round in range(settings.max_tool_rounds):
         result = await generate_with_tools(messages, all_tools)
 
         if result.finished and not result.tool_calls:
@@ -468,7 +482,7 @@ async def _generate_with_tool_loop(
             })
 
     # Exhausted rounds — ask for a final answer without tools
-    logger.warning("Tool loop hit %d rounds, forcing final answer", MAX_TOOL_ROUNDS)
+    logger.warning("Tool loop hit %d rounds, forcing final answer", settings.max_tool_rounds)
     result = await generate_with_tools(messages, [])
     return result.text or "🦝"
 

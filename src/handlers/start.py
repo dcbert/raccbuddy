@@ -1,5 +1,7 @@
 """Handler for the /start command."""
 
+from __future__ import annotations
+
 import logging
 
 from telegram import Update
@@ -24,8 +26,7 @@ WELCOME_TEXT = (
     "/insights <Name> — conversation insights\n"
     "/relationship <Name> — relationship score\n"
     "/contacts — list all contacts (all platforms)\n"
-    "/habits — your habit patterns\n"
-    "/streak — your activity streak\n\n"
+    "/skills — list active chat & nudge skills\n\n"
     "Or just chat with me naturally — I know all your contacts! 💪"
 )
 
@@ -38,14 +39,21 @@ WELCOME_TEXT_CONFIGURED = (
     "/insights <Name> — conversation insights\n"
     "/relationship <Name> — relationship score\n"
     "/contacts — list all contacts (all platforms)\n"
-    "/habits — your habit patterns\n"
-    "/streak — your activity streak\n\n"
+    "/skills — list active chat & nudge skills\n\n"
     "Or just chat with me naturally — I know all your contacts! 💪"
 )
 
 
 async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Welcome the user with Raccy's intro message."""
+    """Welcome the user with Raccy's intro message.
+
+    If the bot is locked to an owner and someone else tries to /start,
+    they receive an access-denied response.
+
+    Args:
+        update: The incoming Telegram update.
+        context: The PTB context (unused here).
+    """
     if not update.effective_user or not update.message:
         return
 

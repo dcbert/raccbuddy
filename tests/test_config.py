@@ -16,10 +16,11 @@ class TestSettings:
         assert s.database_url.startswith("postgresql+asyncpg://")
 
     def test_default_ollama_values(self) -> None:
-        s = Settings(telegram_bot_token="test-token")
-        assert s.ollama_base_url == "http://localhost:11434"
-        assert s.ollama_model == "llama3.2:3b"
-        assert s.ollama_embed_model == "nomic-embed-text"
+        # Check class-level defaults (not env-overridden values)
+        fields = Settings.model_fields
+        assert fields["ollama_base_url"].default == "http://localhost:11434"
+        assert fields["ollama_model"].default == "llama3.2:3b"
+        assert fields["ollama_embed_model"].default == "nomic-embed-text"
 
     def test_token_limits(self) -> None:
         """Test token limit configuration (uses env/defaults)."""
@@ -57,3 +58,43 @@ class TestSettings:
         assert s.ollama_model == "qwen2.5:7b"
         assert s.nudge_check_interval_minutes == 30
         assert s.owner_telegram_id == 123456789
+
+    def test_new_v020_settings_have_sensible_defaults(self) -> None:
+        """All settings added in the v0.2.0 professionalization pass have correct class defaults."""
+        fields = Settings.model_fields
+        # Context / memory
+        assert fields["max_context_tokens"].default == 30_000
+        assert fields["embed_dimensions"].default == 768
+        assert fields["memory_recent_messages"].default == 15
+        assert fields["memory_semantic_chunks"].default == 6
+        assert fields["memory_max_summaries"].default == 3
+        assert 0.0 < fields["memory_owner_budget_ratio"].default < 1.0
+        assert 0.0 < fields["memory_contact_budget_ratio"].default < 1.0
+        assert 0.0 < fields["memory_min_owner_relevance"].default < 1.0
+        # Conversation history
+        assert fields["memory_conversation_turns"].default == 10
+        # DB pool
+        assert fields["db_pool_size"].default > 0
+        assert fields["db_max_overflow"].default > 0
+        assert fields["db_pool_timeout"].default > 0
+        # Misc
+        assert fields["max_tool_rounds"].default > 0
+        assert fields["api_secret_key"].default == ""  # empty = auth disabled by default
+
+    def test_context_tokens_overridable(self) -> None:
+        env = {
+            "TELEGRAM_BOT_TOKEN": "test-token",
+            "MAX_CONTEXT_TOKENS": "8192",
+        }
+        with patch.dict(os.environ, env, clear=False):
+            s = Settings()
+        assert s.max_context_tokens == 8192
+
+    def test_api_secret_key_overridable(self) -> None:
+        env = {
+            "TELEGRAM_BOT_TOKEN": "test-token",
+            "API_SECRET_KEY": "supersecret",
+        }
+        with patch.dict(os.environ, env, clear=False):
+            s = Settings()
+        assert s.api_secret_key == "supersecret"

@@ -5,12 +5,24 @@ services:
       POSTGRES_USER: raccbuddy
       POSTGRES_PASSWORD: raccbuddy
       POSTGRES_DB: raccbuddy
+    ports:
+      - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     restart: unless-stopped
+    # Healthcheck ensures the app never starts before Postgres is ready
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U raccbuddy -d raccbuddy"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
 
   app:
     build: .
+    # Expose the REST API port for external tooling / debugging.
+    # The WhatsApp bridge reaches it via internal Docker network (no public exposure needed).
+    # Uncomment the line below to expose on the host machine:
     # ports:
     #   - "8000:8000"
     environment:
@@ -35,14 +47,21 @@ services:
 
       # xAI (optional)
       - XAI_API_KEY=${XAI_API_KEY:-}
-      - XAI_MODEL=${XAI_MODEL:-grok-4-1-fast-reasoning}
+      - XAI_MODEL=${XAI_MODEL:-grok-3-mini}
+
+      # Context window — sent as num_ctx to Ollama (MUST match Ollama's loaded model capacity)
+      - MAX_CONTEXT_TOKENS=${MAX_CONTEXT_TOKENS:-30000}
 
       # Optional settings
-      - MAX_CONTEXT_TOKENS=${MAX_CONTEXT_TOKENS:-2000}
       - NUDGE_CHECK_INTERVAL_MINUTES=${NUDGE_CHECK_INTERVAL_MINUTES:-60}
       - OWNER_MEMORY_RETENTION_DAYS=${OWNER_MEMORY_RETENTION_DAYS:-90}
+
+      # API security — generate with: python -c "import secrets; print(secrets.token_hex(32))"
+      - API_SECRET_KEY=${API_SECRET_KEY:-}
+
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     restart: unless-stopped
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -52,11 +71,15 @@ services:
     environment:
       - PORT=3001
       - PYTHON_CORE_URL=http://app:8000
+      # Must match API_SECRET_KEY set on the app service
+      - API_SECRET_KEY=${API_SECRET_KEY:-}
     volumes:
       - wa-session:/app/.wwebjs_auth
     depends_on:
-      - db
-      - app
+      db:
+        condition: service_healthy
+      app:
+        condition: service_started
     restart: unless-stopped
 
 volumes:

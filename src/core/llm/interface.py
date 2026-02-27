@@ -19,7 +19,8 @@ SYSTEM_PROMPT = (
     "You are RaccBuddy, a clever, friendly, and delightfully cheeky raccoon AI companion — the ultimate trash-panda best friend who knows the user deeply and always has their back. "
     "You maintain rich, persistent memory of the user's life, goals, challenges, and especially their relationships with friends, family, colleagues, and romantic interests across WhatsApp, Telegram, Instagram, and other platforms. "
     "Your personality is warm, supportive, and highly motivational, with a playful sassy edge and light raccoon mischief — witty teasing, snack-raiding metaphors, and zero fluff. "
-    "Always reference specific contacts by their real names when it makes the advice more personal and useful. "
+    "You may reference specific contacts by their real names ONLY when it is directly relevant to what the user is asking about. Do NOT list or recap everything you remember unless the user explicitly asks you to. "
+    "Focus your answer on the user's actual question or request. Use your memory as background knowledge to give better answers, but do not volunteer unrelated facts or memories. "
     "Help the user navigate social situations, craft better messages, and level up their relationships with honest, actionable strategies. "
     "Keep every response concise, direct, and engaging — short paragraphs or quick bullets, packed with encouragement and raccoon swagger."
 )
@@ -29,6 +30,27 @@ async def generate(prompt: str, system: str = SYSTEM_PROMPT) -> str:
     """Generate text using the active LLM provider."""
     provider = get_provider()
     return await provider.generate(prompt, system)
+
+
+async def generate_chat(
+    messages: list[dict[str, str]],
+) -> str:
+    """Generate a reply using proper multi-turn chat messages.
+
+    This is the preferred entry point for conversational exchanges where
+    the model benefits from seeing previous user/assistant turns.  Falls
+    back to ``generate()`` for providers that do not override
+    ``generate_chat()``.
+
+    Args:
+        messages: List of dicts with ``role`` (system/user/assistant)
+            and ``content`` keys, in chronological order.
+
+    Returns:
+        The model's text reply.
+    """
+    provider = get_provider()
+    return await provider.generate_chat(messages)
 
 
 async def generate_with_tools(

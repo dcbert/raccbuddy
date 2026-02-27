@@ -21,8 +21,6 @@ logger = logging.getLogger(__name__)
 
 XAI_API_BASE = "https://api.x.ai/v1"
 
-MAX_TOOL_ROUNDS = 10
-
 
 class XAIProvider(BaseLLMProvider):
     """Cloud LLM provider using the xAI (Grok) API."""
@@ -59,10 +57,58 @@ class XAIProvider(BaseLLMProvider):
             )
             response.raise_for_status()
             data = response.json()
-            choices = data.get("choices", [])
-            if choices:
-                return choices[0].get("message", {}).get("content", "")
-            return ""
+
+        # Log token usage for observability (CLAUDE.md requirement)
+        usage = data.get("usage", {})
+        logger.info(
+            "xAI generate | model=%s | prompt_tokens=%s | completion_tokens=%s | total_tokens=%s",
+            settings.xai_model,
+            usage.get("prompt_tokens", "?"),
+            usage.get("completion_tokens", "?"),
+            usage.get("total_tokens", "?"),
+        )
+
+        choices = data.get("choices", [])
+        if choices:
+            return choices[0].get("message", {}).get("content", "")
+        return ""
+
+    async def generate_chat(
+        self,
+        messages: list[dict[str, str]],
+    ) -> str:
+        """Generate via the xAI chat/completions endpoint with multi-turn messages.
+
+        Sends proper alternating user/assistant turns so the model
+        maintains real conversation coherence across exchanges.
+        """
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            response = await client.post(
+                f"{XAI_API_BASE}/chat/completions",
+                headers=self._headers(),
+                json={
+                    "model": settings.xai_model,
+                    "messages": messages,
+                    "temperature": 0.7,
+                },
+            )
+            response.raise_for_status()
+            data = response.json()
+
+        # Log token usage for observability (CLAUDE.md requirement)
+        usage = data.get("usage", {})
+        logger.info(
+            "xAI generate_chat | model=%s | prompt_tokens=%s | completion_tokens=%s | total_tokens=%s",
+            settings.xai_model,
+            usage.get("prompt_tokens", "?"),
+            usage.get("completion_tokens", "?"),
+            usage.get("total_tokens", "?"),
+        )
+
+        choices = data.get("choices", [])
+        if choices:
+            return choices[0].get("message", {}).get("content", "")
+        return ""
 
     async def generate_with_tools(
         self,
@@ -86,6 +132,15 @@ class XAIProvider(BaseLLMProvider):
             )
             response.raise_for_status()
             data = response.json()
+
+        # Log token usage for observability (CLAUDE.md requirement)
+        usage = data.get("usage", {})
+        logger.info(
+            "xAI generate_with_tools | model=%s | prompt_tokens=%s | completion_tokens=%s",
+            settings.xai_model,
+            usage.get("prompt_tokens", "?"),
+            usage.get("completion_tokens", "?"),
+        )
 
         choices = data.get("choices", [])
         if not choices:

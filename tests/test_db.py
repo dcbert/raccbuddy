@@ -27,6 +27,7 @@ from src.core.db import (
     save_summary,
     upsert_contact,
 )
+from src.core.db.models import NudgeCooldown
 
 
 class TestModels:
@@ -48,8 +49,27 @@ class TestModels:
         assert Contact.__tablename__ == "contacts"
 
     def test_all_models_inherit_base(self) -> None:
-        for model in (Message, Summary, Relationship, Habit, Contact):
+        for model in (Message, Summary, Relationship, Habit, Contact, NudgeCooldown):
             assert issubclass(model, Base)
+
+    def test_nudge_cooldown_tablename(self) -> None:
+        assert NudgeCooldown.__tablename__ == "nudge_cooldowns"
+
+    def test_nudge_cooldown_columns_exist(self) -> None:
+        cols = {c.name for c in NudgeCooldown.__table__.columns}
+        assert {"id", "owner_id", "skill_name", "last_fired_at"}.issubset(cols)
+
+    def test_nudge_cooldown_unique_constraint(self) -> None:
+        constraints = {c.name for c in NudgeCooldown.__table__.constraints}
+        assert "uq_owner_skill_cooldown" in constraints
+
+    def test_nudge_cooldown_owner_id_not_nullable(self) -> None:
+        col = NudgeCooldown.__table__.columns["owner_id"]
+        assert col.nullable is False
+
+    def test_nudge_cooldown_skill_name_not_nullable(self) -> None:
+        col = NudgeCooldown.__table__.columns["skill_name"]
+        assert col.nullable is False
 
     def test_relationship_default_score(self) -> None:
         r = Relationship.__table__.columns["score"]

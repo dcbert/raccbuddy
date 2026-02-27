@@ -25,6 +25,7 @@ class TestScheduleLLMJob:
         mock_session = AsyncMock()
         mock_session.__aenter__ = AsyncMock(return_value=mock_session)
         mock_session.__aexit__ = AsyncMock(return_value=False)
+        mock_session.add = MagicMock()  # add() is sync in SQLAlchemy
         mock_get_session.return_value = mock_session
 
         job_id = await schedule_llm_job(
@@ -43,6 +44,7 @@ class TestScheduleLLMJob:
         mock_session = AsyncMock()
         mock_session.__aenter__ = AsyncMock(return_value=mock_session)
         mock_session.__aexit__ = AsyncMock(return_value=False)
+        mock_session.add = MagicMock()  # add() is sync in SQLAlchemy
         mock_get_session.return_value = mock_session
 
         id1 = await schedule_llm_job(123, "msg1", 30)

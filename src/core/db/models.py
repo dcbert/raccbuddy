@@ -10,7 +10,10 @@ from sqlalchemy import BigInteger, Boolean, Computed, Date, DateTime, Float, For
 from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
-EMBED_DIMENSIONS = 768
+from src.core.config import settings
+
+# Single source of truth for embedding vector dimensions — sourced from config.
+EMBED_DIMENSIONS: int = settings.embed_dimensions
 
 
 class Base(DeclarativeBase):
@@ -49,6 +52,7 @@ class Message(Base):
         Integer, ForeignKey("contacts.id", ondelete="CASCADE"), nullable=True, index=True,
     )
     text: Mapped[str] = mapped_column(Text, nullable=False)
+    is_bot_reply: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     timestamp: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False,
     )
@@ -180,6 +184,31 @@ class ScheduledJobModel(Base):
     executed: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Nudge cooldown persistence
+# ---------------------------------------------------------------------------
+
+
+class NudgeCooldown(Base):
+    """Persists the last-fired timestamp for each owner/skill pair.
+
+    Replaces the in-memory ``_cooldowns`` dict so nudge debouncing survives
+    bot restarts.
+    """
+
+    __tablename__ = "nudge_cooldowns"
+    __table_args__ = (
+        UniqueConstraint("owner_id", "skill_name", name="uq_owner_skill_cooldown"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    owner_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+    skill_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    last_fired_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False,
     )
 
 

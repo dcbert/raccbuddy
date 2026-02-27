@@ -106,5 +106,12 @@ async def send_nudge(
 
 
 async def detect_habits(user_id: int) -> list:
-    """Retrieve detected habits for a user."""
-    return await get_all_habits()
+    """Retrieve detected habits for a user.
+
+    Args:
+        user_id: The owner's Telegram user ID.
+
+    Returns:
+        List of ``Habit`` rows belonging to the user.
+    """
+    return await get_all_habits(owner_id=user_id)
