@@ -255,9 +255,10 @@ class ContextBuilder:
         budget_chars: int,
     ) -> str:
         """Retrieve and format query-relevant owner self-memory facts."""
+        from sqlalchemy import desc, select
+
         from src.core.db.models import OwnerMemory
         from src.core.db.session import get_session
-        from sqlalchemy import desc, select
 
         layer_budget = int(budget_chars * settings.memory_owner_budget_ratio)
         k = settings.memory_semantic_chunks
@@ -461,4 +462,5 @@ class ContextBuilder:
 # Module-level singleton — import and use this directly
 # ---------------------------------------------------------------------------
 
+context_builder = ContextBuilder()
 context_builder = ContextBuilder()

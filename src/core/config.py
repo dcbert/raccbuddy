@@ -128,6 +128,30 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------------ #
     max_tool_rounds: int = 10
 
+    # ------------------------------------------------------------------ #
+    # Voice (STT + TTS)
+    # ------------------------------------------------------------------ #
+    # Master switch — voice handler is a no-op when False.
+    voice_enabled: bool = False
+
+    # Reply mode for voice messages: "text", "voice", or "both".
+    voice_reply_mode: str = "text"
+
+    # Optional ISO-639-1 language code to force for transcription
+    # (empty = auto-detect).
+    voice_language: str = ""
+
+    # STT provider & model (see src/core/voice/providers/).
+    stt_provider: str = "whisper"
+    stt_model: str = "openai/whisper-small"
+
+    # TTS provider & model.
+    tts_provider: str = "bark"
+    tts_model: str = "suno/bark-small"
+
+    # Bark voice preset (e.g. "v2/en_speaker_6").
+    tts_voice_preset: str = "v2/en_speaker_6"
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
 

@@ -29,6 +29,7 @@ from src.core.skills.loader import load_all_user_skills
 from src.core.state import flush_all_dirty, load_all_states
 from src.handlers.chat import analyze_handler, chat_handler, contacts_handler, insights_handler, name_handler, relationship_handler, skills_handler
 from src.handlers.start import start_handler
+from src.handlers.voice import voice_handler
 from src.summarizer import summarize_all_contacts
 
 logging.basicConfig(
@@ -193,6 +194,9 @@ def main() -> None:
 
     # Message handler for all non-command text (including forwarded)
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, chat_handler))
+
+    # Voice message handler (voice notes + audio files)
+    app.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, voice_handler))
 
     logger.info("RaccBuddy is starting... 🦝")
     app.run_polling()

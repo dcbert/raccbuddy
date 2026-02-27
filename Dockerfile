@@ -24,6 +24,7 @@ FROM python:3.12-slim
 # Install runtime dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq5 \
+    ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy virtual environment from builder

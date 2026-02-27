@@ -14,7 +14,6 @@ import pytest
 
 from src.core.memory.context_builder import ContextBuilder, context_builder
 
-
 # ---------------------------------------------------------------------------
 # Singleton
 # ---------------------------------------------------------------------------

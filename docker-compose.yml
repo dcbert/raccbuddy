@@ -59,6 +59,10 @@ services:
       # API security — generate with: python -c "import secrets; print(secrets.token_hex(32))"
       - API_SECRET_KEY=${API_SECRET_KEY:-}
 
+      # Voice (optional)
+      - VOICE_ENABLED=${VOICE_ENABLED:-false}
+      - VOICE_REPLY_MODE=${VOICE_REPLY_MODE:-text}
+
     depends_on:
       db:
         condition: service_healthy
