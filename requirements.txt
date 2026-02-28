@@ -11,6 +11,16 @@ fastapi>=0.115.0,<1.0
 uvicorn[standard]>=0.30.0,<1.0
 openai>=1.0.0,<2.0
 
+# Agentic core (LangGraph)
+langgraph>=0.2.0,<1.0
+langgraph-checkpoint-postgres>=2.0.0,<3.0
+psycopg[binary]>=3.1.0,<4.0
+
+# Agentic optional: tracing & metrics
+# Install with: pip install langfuse prometheus-client
+langfuse>=2.0.0,<3.0;python_version>="3.12"
+prometheus-client>=0.20.0,<1.0
+
 # Migrations
 alembic>=1.13.0,<2.0
 psycopg2-binary>=2.9.0,<3.0

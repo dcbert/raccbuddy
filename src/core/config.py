@@ -129,6 +129,31 @@ class Settings(BaseSettings):
     max_tool_rounds: int = 10
 
     # ------------------------------------------------------------------ #
+    # Agentic proactive core (opt-in)
+    # ------------------------------------------------------------------ #
+    agentic_enabled: bool = False
+    # Checkpointer backend for LangGraph state persistence ("postgres" | "sqlite")
+    checkpointer_backend: str = "postgres"
+    # Token budget for a single agentic cycle (separate from max_context_tokens)
+    max_cycle_tokens: int = 8192
+    # How often the agentic cycle runs (minutes)
+    agentic_cycle_interval_minutes: int = 30
+
+    # ------------------------------------------------------------------ #
+    # Langfuse tracing (optional, self-hosted)
+    # ------------------------------------------------------------------ #
+    langfuse_enabled: bool = False
+    langfuse_public_key: str = ""
+    langfuse_secret_key: str = ""
+    langfuse_host: str = "http://localhost:3000"
+
+    # ------------------------------------------------------------------ #
+    # Prometheus metrics (optional)
+    # ------------------------------------------------------------------ #
+    prometheus_enabled: bool = False
+    prometheus_port: int = 9090
+
+    # ------------------------------------------------------------------ #
     # Voice (STT + TTS)
     # ------------------------------------------------------------------ #
     # Master switch — voice handler is a no-op when False.

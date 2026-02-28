@@ -98,3 +98,27 @@ class TestSettings:
         with patch.dict(os.environ, env, clear=False):
             s = Settings()
         assert s.api_secret_key == "supersecret"
+
+    def test_agentic_settings_defaults(self) -> None:
+        """Agentic settings have correct defaults."""
+        fields = Settings.model_fields
+        assert fields["agentic_enabled"].default is False
+        assert fields["checkpointer_backend"].default == "postgres"
+        assert fields["max_cycle_tokens"].default == 8192
+        assert fields["agentic_cycle_interval_minutes"].default == 30
+        assert fields["langfuse_enabled"].default is False
+        assert fields["prometheus_enabled"].default is False
+        assert fields["prometheus_port"].default == 9090
+
+    def test_agentic_settings_overridable(self) -> None:
+        env = {
+            "TELEGRAM_BOT_TOKEN": "test-token",
+            "AGENTIC_ENABLED": "true",
+            "MAX_CYCLE_TOKENS": "4096",
+            "AGENTIC_CYCLE_INTERVAL_MINUTES": "15",
+        }
+        with patch.dict(os.environ, env, clear=False):
+            s = Settings()
+        assert s.agentic_enabled is True
+        assert s.max_cycle_tokens == 4096
+        assert s.agentic_cycle_interval_minutes == 15

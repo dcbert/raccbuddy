@@ -18,6 +18,7 @@ import uvicorn
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
 
 from src.api import api
+from src.core.agentic import init_agentic, shutdown_agentic
 from src.core.config import settings
 from src.core.db import init_db
 from src.core.memory import memory
@@ -97,6 +98,28 @@ async def post_init(application: Application) -> None:
         )
         logger.info("Nudge, summary, and state-flush schedulers started")
 
+    # Initialize agentic subsystem (opt-in via AGENTIC_ENABLED=true)
+    if settings.agentic_enabled:
+        await init_agentic()
+        if application.job_queue:
+            application.job_queue.run_repeating(
+                agentic_job,
+                interval=settings.agentic_cycle_interval_minutes * 60,
+                first=120,
+            )
+            logger.info(
+                "Agentic cycle scheduled (every %d min)",
+                settings.agentic_cycle_interval_minutes,
+            )
+
+
+async def agentic_job(context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Periodic job — run one agentic proactive cycle."""
+    if context.bot:
+        from src.core.agentic.engine import run_agentic_cycle
+
+        await run_agentic_cycle(context.bot)
+
 
 async def nudge_job(context: ContextTypes.DEFAULT_TYPE) -> None:
     """Periodic job — evaluate all nudge skills once per cycle."""
@@ -140,6 +163,12 @@ async def post_shutdown(application: Application) -> None:
         logger.info("All dirty state flushed to DB")
     except Exception:
         logger.warning("State flush on shutdown failed", exc_info=True)
+
+    try:
+        await shutdown_agentic()
+        logger.info("Agentic subsystem torn down")
+    except Exception:
+        logger.warning("Agentic teardown on shutdown failed", exc_info=True)
 
     try:
         await teardown_all_plugins()

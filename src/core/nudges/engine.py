@@ -105,6 +105,35 @@ async def send_nudge(
         logger.exception("Failed to send nudge to user %d", user_id)
 
 
+async def execute_nudge_from_agent(
+    bot: object,
+    user_id: int,
+    trigger: str,
+    text: str,
+) -> None:
+    """Deliver a pre-crafted nudge from the agentic engine.
+
+    Unlike ``send_nudge``, this function does **not** call the LLM — the
+    Crafter node has already generated the final text.
+
+    Args:
+        bot: The Telegram bot instance.
+        user_id: The recipient's Telegram user ID.
+        trigger: The nudge trigger name (for logging).
+        text: The final nudge text to deliver.
+    """
+    try:
+        await bot.send_message(chat_id=user_id, text=text)  # type: ignore[attr-defined]
+        logger.info(
+            "Agentic nudge sent to user %d (trigger: %s)", user_id, trigger,
+        )
+    except Exception:
+        logger.exception(
+            "Failed to send agentic nudge to user %d (trigger: %s)",
+            user_id, trigger,
+        )
+
+
 async def detect_habits(user_id: int) -> list:
     """Retrieve detected habits for a user.
 
