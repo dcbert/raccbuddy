@@ -436,7 +436,7 @@ On your development machine (Apple Silicon or any platform):
 export DOCKER_USERNAME=your-dockerhub-username
 
 # Run the deployment script
-./deploy-to-dockerhub.sh
+./scripts/deploy-to-dockerhub.sh
 ```
 
 This script will:
@@ -1004,7 +1004,7 @@ A: Create a new provider class in `src/core/llm/providers/` that implements the 
 - [x] **Phase 3**: Skills system (chat + nudge)
 - [x] **Phase 4**: LLM function calling / tool use
 - [x] **Phase 5**: Persistent state, Alembic migrations, dynamic relationship scoring, mood detection, habit detection, owner memory deduplication
-- [ ] **Phase 6**: Voice message support (transcription + TTS)
+- [x] **Phase 6**: Voice message support (transcription + TTS)
 - [ ] **Phase 7**: Multi-user support (family/team mode)
 - [ ] **Phase 8**: Signal/Discord/Matrix integrations
 - [ ] **Phase 9**: Web dashboard for insights and configuration
