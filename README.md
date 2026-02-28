@@ -56,6 +56,7 @@
 - **Multi-LLM Support**: Works with local Ollama models (llama3.2, qwen2.5) or cloud providers (xAI Grok)
 - **Function Calling**: Advanced LLM providers can call tools autonomously (analyze contacts, get insights, schedule messages)
 - **ContextBuilder**: A layered, token-budgeted context assembly pipeline (30,000 token default, fully configurable)
+- **Multi-turn Conversations**: Proper user/assistant alternating message history for coherent dialogue (via `generate_chat()` + Ollama `/api/chat`)
 
 ### 💬 Platform Support
 - **Telegram Bot**: Full-featured bot with inline commands and natural conversation
@@ -77,6 +78,20 @@ When using advanced providers (xAI, OpenAI), Raccy can autonomously:
 - List all contacts across platforms
 - Summarize historical conversations
 - Schedule future messages
+
+### 🎤 Voice Messages
+- **Local transcription** via OpenAI Whisper (configurable model size)
+- **Text-to-speech** via Suno Bark for voice replies
+- **Audio format conversion** handled transparently via ffmpeg
+- **Reply mode**: text-only, voice-only, or both (configurable)
+- Fully opt-in: set `VOICE_ENABLED=true` to activate
+
+### 🧠 Agentic Proactive Core (Opt-in)
+- **LangGraph-based** 4-node supervisor graph: ContextKeeper -> NudgePlanner -> Crafter -> Reflector
+- **Quality-gated nudges**: the Reflector LLM evaluates each crafted nudge before delivery
+- **Checkpointed state**: survives restarts via PostgreSQL or SQLite backend
+- **Observability**: optional Langfuse tracing and Prometheus metrics
+- Fully opt-in: set `AGENTIC_ENABLED=true` to activate
 
 ### 🔌 Extensible Skills System
 
@@ -725,6 +740,15 @@ raccbuddy/
 │   │   │   ├── models.py         # SQLAlchemy models (pgvector)
 │   │   │   ├── crud.py           # Database queries
 │   │   │   └── session.py        # Engine & session factory
+│   │   ├── agentic/
+│   │   │   ├── __init__.py       # Init/shutdown lifecycle
+│   │   │   ├── checkpointer_registry.py  # Pluggable LangGraph checkpointers
+│   │   │   ├── engine.py         # Proactive cycle orchestration
+│   │   │   ├── graph.py          # 4-node StateGraph (LangGraph)
+│   │   │   ├── metrics.py        # Prometheus counters/histograms
+│   │   │   ├── state.py          # AgenticState TypedDict
+│   │   │   ├── tools.py          # Skill/tool adapters for graph nodes
+│   │   │   └── tracing.py        # Langfuse tracing integration
 │   │   ├── habits/
 │   │   │   └── detector.py       # Habit detection (frequency + LLM)
 │   │   ├── llm/
@@ -751,11 +775,19 @@ raccbuddy/
 │   │   │   └── nudge.py          # Built-in nudge skills
 │   │   ├── state/
 │   │   │   └── persistent.py     # Persistent state management
+│   │   ├── voice/
+│   │   │   ├── __init__.py       # Public API (voice_manager singleton)
+│   │   │   ├── base.py           # STT/TTS abstract base classes
+│   │   │   ├── manager.py        # VoiceManager orchestrator
+│   │   │   └── providers/
+│   │   │       ├── whisper_stt.py # Whisper STT provider
+│   │   │       └── bark_tts.py   # Bark TTS provider
 │   │   └── tools/
 │   │       └── registry.py       # LLM function calling tools
 │   ├── handlers/
 │   │   ├── chat.py               # Message handling + enrichment
-│   │   └── start.py              # /start command
+│   │   ├── start.py              # /start command
+│   │   └── voice.py              # Voice message handler
 │   └── plugins/
 │       └── base.py               # Plugin base class
 ├── alembic/                      # Database migration scripts
@@ -767,6 +799,9 @@ raccbuddy/
 │   └── example_weekend.py
 ├── plugins/                      # Custom platform plugins (auto-loaded)
 │   └── example_echo.py
+├── scripts/
+│   ├── deploy-to-dockerhub.sh    # Multi-platform build + push + backup
+│   └── restore-from-backup.sh    # Restore DB + WhatsApp session from backup
 ├── whatsapp-service/             # WhatsApp bridge (Node.js)
 │   ├── src/
 │   │   ├── index.js              # whatsapp-web.js setup
@@ -789,7 +824,7 @@ raccbuddy/
 
 Receive messages from external platform bridges.
 
-**Authentication:** When `API_SECRET_KEY` is set in `.env`, all requests must include an `X-API-Key` header matching the configured secret. Requests without the correct key receive `403 Forbidden`. Leave `API_SECRET_KEY` empty to disable auth (local/LAN use only).
+**Authentication:** When `API_SECRET_KEY` is set in `.env`, all requests must include an `X-API-Key` header matching the configured secret. Requests without the correct key receive `401 Unauthorized`. Leave `API_SECRET_KEY` empty to disable auth (local/LAN use only).
 
 **Headers:**
 ```
@@ -846,7 +881,7 @@ Available when using advanced providers (xAI):
 | `OLLAMA_MODEL` | `llama3.2:3b` | Model for text generation |
 | `OLLAMA_EMBED_MODEL` | `nomic-embed-text` | Model for embeddings |
 | `XAI_API_KEY` | *(optional)* | xAI API key (if using xAI) |
-| `XAI_MODEL` | `grok-3-mini` | xAI model name |
+| `XAI_MODEL` | `grok-4-1-fast-reasoning` | xAI model name |
 | `MAX_CONTEXT_TOKENS` | `30000` | Maximum LLM context size (Ollama KV-cache + input budget) |
 | `EMBED_DIMENSIONS` | `768` | Embedding vector dimensions (must match embed model) |
 | `API_SECRET_KEY` | *(empty)* | X-API-Key secret for `POST /api/messages`; leave empty to disable auth |
@@ -863,6 +898,26 @@ Available when using advanced providers (xAI):
 | `OWNER_MEMORY_RETENTION_DAYS` | `90` | Days before low-importance memories are pruned |
 | `DB_POOL_SIZE` | `10` | SQLAlchemy connection pool size |
 | `DB_MAX_OVERFLOW` | `20` | Maximum overflow connections |
+| `MAX_TOOL_ROUNDS` | `10` | Max LLM tool-call loop iterations |
+| `VOICE_ENABLED` | `false` | Enable voice message handling (requires ffmpeg + torch) |
+| `VOICE_REPLY_MODE` | `text` | Reply mode for voice messages: `text`, `voice`, or `both` |
+| `VOICE_LANGUAGE` | *(empty)* | Force transcription language (ISO-639-1, e.g. `en`); empty = auto-detect |
+| `STT_PROVIDER` | `whisper` | Speech-to-text provider |
+| `STT_MODEL` | `openai/whisper-small` | HuggingFace model ID for STT |
+| `TTS_PROVIDER` | `bark` | Text-to-speech provider |
+| `TTS_MODEL` | `suno/bark-small` | HuggingFace model ID for TTS |
+| `TTS_VOICE_PRESET` | `v2/en_speaker_6` | Bark voice preset |
+| `AGENTIC_ENABLED` | `false` | Enable the proactive agentic cycle (LangGraph) |
+| `CHECKPOINTER_BACKEND` | `postgres` | LangGraph checkpointer: `postgres` or `sqlite` |
+| `MAX_CYCLE_TOKENS` | `8192` | Token budget per agentic cycle |
+| `AGENTIC_CYCLE_INTERVAL_MINUTES` | `30` | How often the agentic cycle runs |
+| `LANGFUSE_ENABLED` | `false` | Enable Langfuse tracing for agentic cycles |
+| `LANGFUSE_PUBLIC_KEY` | *(empty)* | Langfuse public key |
+| `LANGFUSE_SECRET_KEY` | *(empty)* | Langfuse secret key |
+| `LANGFUSE_HOST` | `http://localhost:3000` | Langfuse server URL |
+| `PROMETHEUS_ENABLED` | `false` | Enable Prometheus metrics endpoint |
+| `PROMETHEUS_PORT` | `9090` | Prometheus metrics HTTP server port |
+| `XAI_ENABLE_BUILTIN_TOOLS` | `false` | Enable Grok built-in tools (web/X/code search — data leaves machine) |
 
 ### Recommended Ollama Models
 
@@ -910,7 +965,7 @@ A: Not yet. RaccBuddy currently locks to one owner (the first person to send `/s
 A: It depends on your LLM. Llama3.2 and Qwen2.5 support many languages. Raccy's personality prompts are in English, but it should respond in whatever language you use.
 
 **Q: Does it support voice messages?**
-A: Not yet, but it's planned for Phase 6.
+A: Yes! Set `VOICE_ENABLED=true` in your `.env`. RaccBuddy transcribes voice notes locally via Whisper and can reply with synthesized speech via Bark. Requires `ffmpeg` and optional `torch`/`transformers` dependencies (see `requirements.txt`).
 
 ### Technical
 
@@ -1004,7 +1059,8 @@ A: Create a new provider class in `src/core/llm/providers/` that implements the 
 - [x] **Phase 3**: Skills system (chat + nudge)
 - [x] **Phase 4**: LLM function calling / tool use
 - [x] **Phase 5**: Persistent state, Alembic migrations, dynamic relationship scoring, mood detection, habit detection, owner memory deduplication
-- [x] **Phase 6**: Voice message support (transcription + TTS)
+- [x] **Phase 6**: Voice message support (Whisper STT + Bark TTS, local processing)
+- [x] **Phase 6b**: Agentic proactive core (LangGraph, quality-gated nudges, Langfuse/Prometheus)
 - [ ] **Phase 7**: Multi-user support (family/team mode)
 - [ ] **Phase 8**: Signal/Discord/Matrix integrations
 - [ ] **Phase 9**: Web dashboard for insights and configuration
