@@ -16,12 +16,16 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from langgraph.graph import END, StateGraph
-
 from src.core.agentic.state import AgenticState, CraftedNudge, NudgeCandidate
 from src.core.config import settings
 
 logger = logging.getLogger(__name__)
+
+# LangGraph's END sentinel value (avoids top-level langgraph import)
+_END = "__end__"
+
+# Approximate chars-per-token ratio for budget calculations
+_CHARS_PER_TOKEN = 4
 
 
 # ---------------------------------------------------------------------------
@@ -35,7 +39,7 @@ async def context_keeper(state: AgenticState) -> dict[str, Any]:
 
     owner_id = state.get("owner_id", settings.owner_telegram_id)
     if not owner_id:
-        return {"error": "No owner_id configured", "next_node": END}
+        return {"error": "No owner_id configured", "next_node": _END}
 
     try:
         ctx = await context_builder.build(
@@ -46,7 +50,7 @@ async def context_keeper(state: AgenticState) -> dict[str, Any]:
         )
     except Exception:
         logger.exception("ContextKeeper failed")
-        return {"error": "context_builder.build() failed", "next_node": END}
+        return {"error": "context_builder.build() failed", "next_node": _END}
 
     logger.info("ContextKeeper: built context (%d chars)", len(ctx))
     return {"context": ctx, "owner_id": owner_id, "next_node": "nudge_planner"}
@@ -55,10 +59,12 @@ async def context_keeper(state: AgenticState) -> dict[str, Any]:
 async def nudge_planner(state: AgenticState) -> dict[str, Any]:
     """Evaluate all registered nudge skills and collect candidates."""
     from src.core.agentic.tools import evaluate_nudge_skill, get_available_nudge_skills
+    from src.core.skills.base import get_registered_skills
 
     if state.get("error"):
-        return {"next_node": END}
+        return {"next_node": _END}
 
+    all_skills = get_registered_skills()
     skills = await get_available_nudge_skills()
     candidates: list[NudgeCandidate] = []
 
@@ -72,9 +78,7 @@ async def nudge_planner(state: AgenticState) -> dict[str, Any]:
             continue
 
         # Build the prompt using the skill's template
-        from src.core.skills.base import get_registered_skills
-
-        skill_obj = get_registered_skills().get(skill_info["name"])
+        skill_obj = all_skills.get(skill_info["name"])
         if skill_obj is None:
             continue
 
@@ -91,7 +95,7 @@ async def nudge_planner(state: AgenticState) -> dict[str, Any]:
 
     if not candidates:
         logger.info("NudgePlanner: no candidates — ending cycle")
-        return {"candidates": [], "next_node": END}
+        return {"candidates": [], "next_node": _END}
 
     logger.info("NudgePlanner: %d candidate(s) found", len(candidates))
     return {"candidates": candidates, "next_node": "crafter"}
@@ -102,11 +106,11 @@ async def crafter(state: AgenticState) -> dict[str, Any]:
     from src.core.llm.interface import generate
 
     if state.get("error"):
-        return {"next_node": END}
+        return {"next_node": _END}
 
     candidates = state.get("candidates", [])
     if not candidates:
-        return {"crafted": [], "next_node": END}
+        return {"crafted": [], "next_node": _END}
 
     context = state.get("context", "")
     crafted: list[CraftedNudge] = []
@@ -156,20 +160,23 @@ async def reflector(state: AgenticState) -> dict[str, Any]:
     from src.core.llm.interface import generate
 
     if state.get("error"):
-        return {"next_node": END}
+        return {"next_node": _END}
 
     crafted = state.get("crafted", [])
     if not crafted:
-        return {"approved": [], "discarded": [], "next_node": END}
+        return {"approved": [], "discarded": [], "next_node": _END}
 
     context = state.get("context", "")
     approved: list[CraftedNudge] = []
     discarded: list[CraftedNudge] = []
 
+    # Use a configurable budget for the reflector context slice
+    reflector_budget = settings.max_cycle_tokens * _CHARS_PER_TOKEN // 3
+
     for nudge in crafted:
         reflection_prompt = (
             f"You are a quality evaluator for proactive nudge messages.\n\n"
-            f"Context:\n{context[:2000]}\n\n"
+            f"Context:\n{context[:reflector_budget]}\n\n"
             f"Nudge to evaluate:\n"
             f"- Trigger: {nudge['trigger']}\n"
             f"- Reason: {nudge['reason']}\n"
@@ -180,7 +187,8 @@ async def reflector(state: AgenticState) -> dict[str, Any]:
         )
         try:
             verdict = await generate(reflection_prompt)
-            if "APPROVE" in verdict.upper():
+            first_word = verdict.strip().split()[0].upper() if verdict.strip() else ""
+            if first_word == "APPROVE":
                 approved.append(nudge)
                 logger.info("Reflector: APPROVED %s", nudge["skill_name"])
             else:
@@ -197,7 +205,7 @@ async def reflector(state: AgenticState) -> dict[str, Any]:
             )
             discarded.append(nudge)
 
-    return {"approved": approved, "discarded": discarded, "next_node": END}
+    return {"approved": approved, "discarded": discarded, "next_node": _END}
 
 
 # ---------------------------------------------------------------------------
@@ -207,7 +215,7 @@ async def reflector(state: AgenticState) -> dict[str, Any]:
 
 def supervisor_router(state: AgenticState) -> str:
     """Route to the next node based on ``state["next_node"]``."""
-    return state.get("next_node", END)
+    return state.get("next_node", _END)
 
 
 # ---------------------------------------------------------------------------
@@ -215,12 +223,17 @@ def supervisor_router(state: AgenticState) -> str:
 # ---------------------------------------------------------------------------
 
 
-def build_graph() -> StateGraph:
-    """Construct and return the compiled LangGraph StateGraph.
+def build_graph() -> Any:
+    """Construct and return an uncompiled LangGraph StateGraph.
+
+    The caller is responsible for compiling with a checkpointer via
+    ``graph.compile(checkpointer=...)``.
 
     Returns:
-        A compiled ``StateGraph`` ready to be invoked.
+        An uncompiled ``StateGraph``.
     """
+    from langgraph.graph import END, StateGraph
+
     graph = StateGraph(AgenticState)
 
     # Add nodes

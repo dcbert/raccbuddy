@@ -114,13 +114,24 @@ class PostgresCheckpointer(BaseCheckpointer):
         return "postgres"
 
     async def setup(self) -> None:
-        """Create checkpoint tables via ``AsyncPostgresSaver.setup()``."""
+        """Create checkpoint tables via ``AsyncPostgresSaver.setup()``.
+
+        Note: This creates a separate psycopg3 connection pool (not the
+        SQLAlchemy asyncpg pool from ``db/session.py``) because
+        ``langgraph-checkpoint-postgres`` requires psycopg3.
+        """
         from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 
         conn_string = _asyncpg_to_psycopg(settings.database_url)
-        self._saver = AsyncPostgresSaver.from_conn_string(conn_string)
+        # Use a small pool — checkpoint writes are infrequent
+        self._saver = AsyncPostgresSaver.from_conn_string(
+            conn_string,
+            pool_size=2,
+        )
         await self._saver.setup()
-        logger.info("PostgresCheckpointer: tables ready")
+        logger.info(
+            "PostgresCheckpointer: tables ready (separate psycopg3 pool, size=2)"
+        )
 
     async def teardown(self) -> None:
         """Close the underlying connection pool."""

@@ -7,7 +7,8 @@ LangGraph can merge partial updates automatically.
 
 from __future__ import annotations
 
-from typing import Any, TypedDict
+import operator
+from typing import Annotated, Any, TypedDict
 
 
 class NudgeCandidate(TypedDict):
@@ -42,14 +43,14 @@ class AgenticState(TypedDict, total=False):
     contacts_summary: str
 
     # NudgePlanner populates these
-    candidates: list[NudgeCandidate]
+    candidates: Annotated[list[NudgeCandidate], operator.add]
 
     # Crafter populates these
-    crafted: list[CraftedNudge]
+    crafted: Annotated[list[CraftedNudge], operator.add]
 
     # Reflector populates these
-    approved: list[CraftedNudge]
-    discarded: list[CraftedNudge]
+    approved: Annotated[list[CraftedNudge], operator.add]
+    discarded: Annotated[list[CraftedNudge], operator.add]
 
     # Supervisor routing
     next_node: str

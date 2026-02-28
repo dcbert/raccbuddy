@@ -18,7 +18,6 @@ import uvicorn
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
 
 from src.api import api
-from src.core.agentic import init_agentic, shutdown_agentic
 from src.core.config import settings
 from src.core.db import init_db
 from src.core.memory import memory
@@ -77,13 +76,14 @@ async def post_init(application: Application) -> None:
     if restored:
         logger.info("Restored %d pending scheduled jobs", restored)
 
-    # Schedule periodic nudge checks
+    # Schedule periodic nudge checks (skip when agentic handles it)
     if application.job_queue:
-        application.job_queue.run_repeating(
-            nudge_job,
-            interval=settings.nudge_check_interval_minutes * 60,
-            first=60,
-        )
+        if not settings.agentic_enabled:
+            application.job_queue.run_repeating(
+                nudge_job,
+                interval=settings.nudge_check_interval_minutes * 60,
+                first=60,
+            )
         # Daily summarization job (every 6 hours)
         application.job_queue.run_repeating(
             summary_job,
@@ -100,6 +100,8 @@ async def post_init(application: Application) -> None:
 
     # Initialize agentic subsystem (opt-in via AGENTIC_ENABLED=true)
     if settings.agentic_enabled:
+        from src.core.agentic import init_agentic
+
         await init_agentic()
         if application.job_queue:
             application.job_queue.run_repeating(
@@ -164,11 +166,14 @@ async def post_shutdown(application: Application) -> None:
     except Exception:
         logger.warning("State flush on shutdown failed", exc_info=True)
 
-    try:
-        await shutdown_agentic()
-        logger.info("Agentic subsystem torn down")
-    except Exception:
-        logger.warning("Agentic teardown on shutdown failed", exc_info=True)
+    if settings.agentic_enabled:
+        try:
+            from src.core.agentic import shutdown_agentic
+
+            await shutdown_agentic()
+            logger.info("Agentic subsystem torn down")
+        except Exception:
+            logger.warning("Agentic teardown on shutdown failed", exc_info=True)
 
     try:
         await teardown_all_plugins()

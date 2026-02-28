@@ -463,4 +463,3 @@ class ContextBuilder:
 # ---------------------------------------------------------------------------
 
 context_builder = ContextBuilder()
-context_builder = ContextBuilder()
