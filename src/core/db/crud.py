@@ -65,11 +65,11 @@ async def get_conversation_history(
     *,
     limit: int = 10,
 ) -> list[Message]:
-    """Return the most recent user↔bot conversation turns for a chat.
+    """Return the most recent owner-side conversation turns for a chat.
 
-    Retrieves the last *limit* messages that are either owner messages
-    (``from_contact_id IS NULL``) or bot replies (``is_bot_reply = True``),
-    ordered chronologically (oldest first).
+    Retrieves the last *limit* messages where ``from_contact_id IS NULL``
+    (i.e. owner messages and bot replies), ordered chronologically
+    (oldest first).
 
     Args:
         chat_id: The Telegram chat ID (usually the owner ID).

@@ -47,7 +47,7 @@ services:
 
       # xAI (optional)
       - XAI_API_KEY=${XAI_API_KEY:-}
-      - XAI_MODEL=${XAI_MODEL:-grok-3-mini}
+      - XAI_MODEL=${XAI_MODEL:-grok-4-1-fast-reasoning}
 
       # Context window — sent as num_ctx to Ollama (MUST match Ollama's loaded model capacity)
       - MAX_CONTEXT_TOKENS=${MAX_CONTEXT_TOKENS:-30000}

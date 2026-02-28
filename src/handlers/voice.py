@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import datetime
 import logging
+import os
 import tempfile
 from pathlib import Path
 
@@ -90,7 +91,6 @@ async def voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         )
         tmp_audio_path = Path(tmp_name)
         # Close the fd — python-telegram-bot will write the file
-        import os
         os.close(tmp_fd)
 
         await file.download_to_drive(str(tmp_audio_path))

@@ -5,13 +5,13 @@ All notable changes to RaccBuddy will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.2.0] - 2026-02-27 — Professionalization Pass
+## [0.2.0-beta] - 2026-02-28
 
 ### Critical Fixes
 
 - **Context window corrected** (`MAX_CONTEXT_TOKENS` default `4000` → `30000`). The previous default caused Ollama to silently truncate all long conversations.
 - **Ollama `num_ctx` now passed on every request** — without this, Ollama allocated only a 2048-token KV-cache regardless of the Python-side setting, producing incoherent replies after short conversations. Fixed in `OllamaProvider.generate()`.
-- **REST API authentication** — `POST /api/messages` now validates `X-API-Key` header against `API_SECRET_KEY` env var. Returns `403 Forbidden` on mismatch. Auth disabled when key is empty (dev/LAN use).
+- **REST API authentication** — `POST /api/messages` now validates `X-API-Key` header against `API_SECRET_KEY` env var. Returns `401 Unauthorized` on mismatch. Auth disabled when key is empty (dev/LAN use).
 - **Graceful shutdown** — PTB `post_shutdown` callback now flushes all dirty in-memory state to PostgreSQL and tears down plugins on SIGTERM, preventing up to several minutes of data loss per restart.
 - **Docker cold-start race eliminated** — PostgreSQL `pg_isready` healthcheck added to `db` service; `app` and `whatsapp` services now use `condition: service_healthy`, preventing connection-refused crashes.
 
@@ -69,7 +69,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`requirements.txt` upper bounds** — all dependencies now have explicit upper-bound version pins to prevent silent breaking upgrades.
 - **`from __future__ import annotations`** — added to `api.py`, `start.py`, `config.py`, `context_builder.py`.
 - **`/start` command** — removed phantom `/habits` and `/streak` commands that were listed in welcome text but never implemented; replaced with `/skills`.
-- **`XAI_MODEL` default** corrected from `grok-4-1-fast-reasoning` → `grok-3-mini` (matching xAI current offering).
+- **`XAI_MODEL` default** corrected from `grok-4-1-fast-reasoning` → `grok-4-1-fast-reasoning` (matching xAI current offering).
 
 ---
 

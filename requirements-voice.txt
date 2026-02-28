@@ -1,0 +1,8 @@
+# Voice (STT + TTS) — optional dependencies for RaccBuddy voice support.
+# Install with: pip install -r requirements-voice.txt
+# Only needed when VOICE_ENABLED=true in .env
+
+torch>=2.0
+transformers>=4.40.0,<5.0
+scipy>=1.12.0,<2.0
+soundfile>=0.12.0,<1.0

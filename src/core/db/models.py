@@ -206,7 +206,7 @@ class NudgeCooldown(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     owner_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
-    skill_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    skill_name: Mapped[str] = mapped_column(String(200), nullable=False)
     last_fired_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), nullable=False,
     )

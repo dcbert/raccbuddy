@@ -21,7 +21,7 @@ def _reset_provider():
         mock_settings.ollama_model = "llama3.2:3b"
         mock_settings.ollama_embed_model = "nomic-embed-text"
         mock_settings.xai_api_key = ""
-        mock_settings.xai_model = "grok-3-mini"
+        mock_settings.xai_model = "grok-4-1-fast-reasoning"
         yield
     reset_provider()
 
@@ -183,7 +183,7 @@ class TestXAIProvider:
         self, mock_client_cls: MagicMock, mock_settings: MagicMock,
     ) -> None:
         mock_settings.xai_api_key = "test-key"
-        mock_settings.xai_model = "grok-3-mini"
+        mock_settings.xai_model = "grok-4-1-fast-reasoning"
 
         mock_client = _make_xai_mock({"content": "Grok says hi"})
         mock_client_cls.return_value = mock_client
@@ -271,7 +271,7 @@ class TestXAIToolCalling:
         self, mock_client_cls: MagicMock, mock_settings: MagicMock,
     ) -> None:
         mock_settings.xai_api_key = "test-key"
-        mock_settings.xai_model = "grok-3-mini"
+        mock_settings.xai_model = "grok-4-1-fast-reasoning"
         # Build a fake SDK-style tool_call object
         tc = MagicMock()
         tc.id = "call_123"
@@ -300,7 +300,7 @@ class TestXAIToolCalling:
         self, mock_client_cls: MagicMock, mock_settings: MagicMock,
     ) -> None:
         mock_settings.xai_api_key = "test-key"
-        mock_settings.xai_model = "grok-3-mini"
+        mock_settings.xai_model = "grok-4-1-fast-reasoning"
 
         mock_client = _make_xai_mock({"content": "Here you go!", "tool_calls": []})
         mock_client_cls.return_value = mock_client
@@ -393,7 +393,7 @@ class TestXAIGenerateChat:
         self, mock_client_cls: MagicMock, mock_settings: MagicMock,
     ) -> None:
         mock_settings.xai_api_key = "test-key"
-        mock_settings.xai_model = "grok-3-mini"
+        mock_settings.xai_model = "grok-4-1-fast-reasoning"
 
         mock_client = _make_xai_mock({"content": "multi-turn xai reply"})
         mock_client_cls.return_value = mock_client
@@ -421,7 +421,7 @@ class TestXAIGenerateChat:
         self, mock_client_cls: MagicMock, mock_settings: MagicMock,
     ) -> None:
         mock_settings.xai_api_key = "test-key"
-        mock_settings.xai_model = "grok-3-mini"
+        mock_settings.xai_model = "grok-4-1-fast-reasoning"
 
         mock_client = _make_xai_mock({"content": ""})
         mock_client_cls.return_value = mock_client

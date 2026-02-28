@@ -56,7 +56,7 @@ class XAIProvider(BaseLLMProvider):
         else:
             logger.info("✅ XAIProvider ready (built-in tools OFF — 100% privacy)")
 
-        logger.info(f"   model={self.model} | temperature={settings.xai_temperature}")
+        logger.info("   model=%s | temperature=%s", self.model, settings.xai_temperature)
 
     def _build_xai_tools(self, custom_tools: List[Dict[str, Any]]) -> List:
         """Mix optional built-in + always-present custom tools."""
@@ -100,6 +100,16 @@ class XAIProvider(BaseLLMProvider):
             messages=[sdk_system(system), sdk_user(prompt)],
         )
         response = await chat.sample()
+
+        if hasattr(response, "usage") and response.usage:
+            logger.info(
+                "xAI generate tokens: prompt=%s completion=%s total=%s model=%s",
+                getattr(response.usage, "prompt_tokens", "?"),
+                getattr(response.usage, "completion_tokens", "?"),
+                getattr(response.usage, "total_tokens", "?"),
+                self.model,
+            )
+
         return response.content or ""
 
     async def generate_chat(self, messages: List[Dict[str, str]]) -> str:
@@ -112,6 +122,16 @@ class XAIProvider(BaseLLMProvider):
             messages=self._build_xai_messages(messages),
         )
         response = await chat.sample()
+
+        if hasattr(response, "usage") and response.usage:
+            logger.info(
+                "xAI generate_chat tokens: prompt=%s completion=%s total=%s model=%s",
+                getattr(response.usage, "prompt_tokens", "?"),
+                getattr(response.usage, "completion_tokens", "?"),
+                getattr(response.usage, "total_tokens", "?"),
+                self.model,
+            )
+
         return response.content or ""
 
     async def generate_with_tools(
@@ -131,6 +151,15 @@ class XAIProvider(BaseLLMProvider):
             )
 
             response = await chat.sample()
+
+            if hasattr(response, "usage") and response.usage:
+                logger.info(
+                    "xAI generate_with_tools tokens: prompt=%s completion=%s total=%s model=%s",
+                    getattr(response.usage, "prompt_tokens", "?"),
+                    getattr(response.usage, "completion_tokens", "?"),
+                    getattr(response.usage, "total_tokens", "?"),
+                    self.model,
+                )
 
             text = response.content or ""
             tool_calls: List[ToolCall] = []
@@ -156,8 +185,8 @@ class XAIProvider(BaseLLMProvider):
                 finished=len(tool_calls) == 0,
             )
 
-        except Exception as e:
-            logger.error(f"xAI generate_with_tools failed (model={self.model})", exc_info=True)
+        except Exception:
+            logger.error("xAI generate_with_tools failed (model=%s)", self.model, exc_info=True)
             raise
 
     async def embed(self, text: str) -> List[float]:

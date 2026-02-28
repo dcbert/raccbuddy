@@ -30,11 +30,7 @@ pytest>=8.0,<9.0
 pytest-asyncio>=0.23.0,<1.0
 
 # Voice (STT + TTS) — optional, only needed when VOICE_ENABLED=true
-# Install with: pip install torch transformers scipy soundfile
-torch>=2.0
-transformers>=4.40.0,<5.0
-scipy>=1.12.0,<2.0
-soundfile>=0.12.0,<1.0
+# Install with: pip install -r requirements-voice.txt
 
-#LLM Providers
+# LLM Providers
 xai-sdk>=1.6.0,<2.0
