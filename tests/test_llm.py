@@ -39,6 +39,29 @@ def _make_httpx_mock(response_data: dict) -> MagicMock:
     return mock_client
 
 
+def _make_xai_mock(response_data: dict) -> MagicMock:
+    """Build a mock xai_sdk.AsyncClient returning a response object from .chat.create().sample()."""
+    # Response object returned by chat.sample()
+    response = MagicMock()
+    # content is the primary field used by provider
+    response.content = response_data.get("content", "")
+    # optional tool_calls list (SDK objects)
+    response.tool_calls = response_data.get("tool_calls", [])
+
+    # chat.handle where chat.create(...) returns an object with sample coroutine
+    chat_obj = MagicMock()
+    async def _sample():
+        return response
+
+    chat_obj.sample = AsyncMock(side_effect=_sample)
+
+    # Client mock where .chat.create(...) returns chat_obj
+    mock_client = MagicMock()
+    mock_client.chat = MagicMock()
+    mock_client.chat.create = MagicMock(return_value=chat_obj)
+    return mock_client
+
+
 # -------------------------------------------------------------------
 # Facade tests (generate / embed via default Ollama provider)
 # -------------------------------------------------------------------
@@ -155,16 +178,14 @@ class TestXAIProvider:
     """Validate xAI provider generate and embed."""
 
     @patch("src.core.llm.providers.xai.settings")
-    @patch("src.core.llm.providers.xai.httpx.AsyncClient")
+    @patch("src.core.llm.providers.xai.AsyncClient")
     async def test_xai_generate(
         self, mock_client_cls: MagicMock, mock_settings: MagicMock,
     ) -> None:
         mock_settings.xai_api_key = "test-key"
         mock_settings.xai_model = "grok-3-mini"
 
-        mock_client = _make_httpx_mock({
-            "choices": [{"message": {"content": "Grok says hi"}}],
-        })
+        mock_client = _make_xai_mock({"content": "Grok says hi"})
         mock_client_cls.return_value = mock_client
 
         from src.core.llm.providers.xai import XAIProvider
@@ -182,24 +203,18 @@ class TestXAIProvider:
         from src.core.llm.providers.xai import XAIProvider
 
         provider = XAIProvider()
-        with pytest.raises(RuntimeError, match="XAI_API_KEY"):
+        with pytest.raises(RuntimeError, match="xAI not configured"):
             await provider.generate("hello", "system")
 
-    @patch("src.core.llm.providers.xai.httpx.AsyncClient")
+    @patch("src.core.llm.providers.xai.AsyncClient")
     async def test_xai_embed_uses_xai_api(
         self, mock_client_cls: MagicMock,
     ) -> None:
-        fake_embedding = [0.2] * 768
-        mock_client = _make_httpx_mock(
-            {"data": [{"embedding": fake_embedding}]},
-        )
-        mock_client_cls.return_value = mock_client
-
         from src.core.llm.providers.xai import XAIProvider
 
         provider = XAIProvider()
-        result = await provider.embed("test")
-        assert len(result) == 768
+        with pytest.raises(NotImplementedError):
+            await provider.embed("test")
 
 
 # -------------------------------------------------------------------
@@ -251,29 +266,20 @@ class TestXAIToolCalling:
     """Validate xAI provider tool-calling responses."""
 
     @patch("src.core.llm.providers.xai.settings")
-    @patch("src.core.llm.providers.xai.httpx.AsyncClient")
+    @patch("src.core.llm.providers.xai.AsyncClient")
     async def test_xai_returns_tool_calls(
         self, mock_client_cls: MagicMock, mock_settings: MagicMock,
     ) -> None:
         mock_settings.xai_api_key = "test-key"
         mock_settings.xai_model = "grok-3-mini"
+        # Build a fake SDK-style tool_call object
+        tc = MagicMock()
+        tc.id = "call_123"
+        tc.function = MagicMock()
+        tc.function.name = "list_contacts"
+        tc.function.arguments = "{}"
 
-        mock_client = _make_httpx_mock({
-            "choices": [{
-                "finish_reason": "tool_calls",
-                "message": {
-                    "content": "",
-                    "tool_calls": [{
-                        "id": "call_123",
-                        "type": "function",
-                        "function": {
-                            "name": "list_contacts",
-                            "arguments": "{}",
-                        },
-                    }],
-                },
-            }],
-        })
+        mock_client = _make_xai_mock({"content": "", "tool_calls": [tc]})
         mock_client_cls.return_value = mock_client
 
         from src.core.llm.providers.xai import XAIProvider
@@ -289,19 +295,14 @@ class TestXAIToolCalling:
         assert result.tool_calls[0].id == "call_123"
 
     @patch("src.core.llm.providers.xai.settings")
-    @patch("src.core.llm.providers.xai.httpx.AsyncClient")
+    @patch("src.core.llm.providers.xai.AsyncClient")
     async def test_xai_returns_text_when_no_tools(
         self, mock_client_cls: MagicMock, mock_settings: MagicMock,
     ) -> None:
         mock_settings.xai_api_key = "test-key"
         mock_settings.xai_model = "grok-3-mini"
 
-        mock_client = _make_httpx_mock({
-            "choices": [{
-                "finish_reason": "stop",
-                "message": {"content": "Here you go!"},
-            }],
-        })
+        mock_client = _make_xai_mock({"content": "Here you go!", "tool_calls": []})
         mock_client_cls.return_value = mock_client
 
         from src.core.llm.providers.xai import XAIProvider
@@ -387,16 +388,14 @@ class TestXAIGenerateChat:
     """Validate xAI provider generate_chat method."""
 
     @patch("src.core.llm.providers.xai.settings")
-    @patch("src.core.llm.providers.xai.httpx.AsyncClient")
+    @patch("src.core.llm.providers.xai.AsyncClient")
     async def test_sends_messages_array(
         self, mock_client_cls: MagicMock, mock_settings: MagicMock,
     ) -> None:
         mock_settings.xai_api_key = "test-key"
         mock_settings.xai_model = "grok-3-mini"
 
-        mock_client = _make_httpx_mock({
-            "choices": [{"message": {"content": "multi-turn xai reply"}}],
-        })
+        mock_client = _make_xai_mock({"content": "multi-turn xai reply"})
         mock_client_cls.return_value = mock_client
 
         from src.core.llm.providers.xai import XAIProvider
@@ -411,18 +410,20 @@ class TestXAIGenerateChat:
         result = await provider.generate_chat(messages)
         assert result == "multi-turn xai reply"
 
-        payload = mock_client.post.call_args[1]["json"]
-        assert payload["messages"] == messages
+        call_kwargs = mock_client.chat.create.call_args
+        # messages should be passed to chat.create as a list of SDK message objects
+        assert "messages" in call_kwargs[1]
+        assert len(call_kwargs[1]["messages"]) == len(messages)
 
     @patch("src.core.llm.providers.xai.settings")
-    @patch("src.core.llm.providers.xai.httpx.AsyncClient")
+    @patch("src.core.llm.providers.xai.AsyncClient")
     async def test_empty_choices_returns_empty(
         self, mock_client_cls: MagicMock, mock_settings: MagicMock,
     ) -> None:
         mock_settings.xai_api_key = "test-key"
         mock_settings.xai_model = "grok-3-mini"
 
-        mock_client = _make_httpx_mock({"choices": []})
+        mock_client = _make_xai_mock({"content": ""})
         mock_client_cls.return_value = mock_client
 
         from src.core.llm.providers.xai import XAIProvider

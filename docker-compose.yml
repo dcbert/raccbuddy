@@ -56,6 +56,28 @@ services:
       - NUDGE_CHECK_INTERVAL_MINUTES=${NUDGE_CHECK_INTERVAL_MINUTES:-60}
       - OWNER_MEMORY_RETENTION_DAYS=${OWNER_MEMORY_RETENTION_DAYS:-90}
 
+      # Agentic / proactive core (opt-in)
+      - AGENTIC_ENABLED=${AGENTIC_ENABLED:-false}
+      - CHECKPOINTER_BACKEND=${CHECKPOINTER_BACKEND:-postgres}
+      - MAX_CYCLE_TOKENS=${MAX_CYCLE_TOKENS:-8192}
+      - AGENTIC_CYCLE_INTERVAL_MINUTES=${AGENTIC_CYCLE_INTERVAL_MINUTES:-30}
+
+      # xAI / Grok optional toggle
+      - XAI_ENABLE_BUILTIN_TOOLS=${XAI_ENABLE_BUILTIN_TOOLS:-false}
+
+      # Langfuse tracing (optional)
+      - LANGFUSE_ENABLED=${LANGFUSE_ENABLED:-false}
+      - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY:-}
+      - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY:-}
+      - LANGFUSE_HOST=${LANGFUSE_HOST:-http://localhost:3000}
+
+      # Prometheus metrics (optional)
+      - PROMETHEUS_ENABLED=${PROMETHEUS_ENABLED:-false}
+      - PROMETHEUS_PORT=${PROMETHEUS_PORT:-9090}
+
+      # Summaries / memory
+      - MAX_SUMMARY_WORDS=${MAX_SUMMARY_WORDS:-150}
+
       # API security — generate with: python -c "import secrets; print(secrets.token_hex(32))"
       - API_SECRET_KEY=${API_SECRET_KEY:-}
 

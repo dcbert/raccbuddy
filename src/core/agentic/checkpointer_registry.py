@@ -108,6 +108,10 @@ class PostgresCheckpointer(BaseCheckpointer):
 
     def __init__(self) -> None:
         self._saver: Any = None
+        # Some langgraph savers (Postgres) return an async context manager
+        # from `from_conn_string(...)`. Keep the context manager here so we
+        # can enter/exit it cleanly on setup/teardown.
+        self._saver_ctx: Any = None
 
     @property
     def name(self) -> str:
@@ -123,24 +127,40 @@ class PostgresCheckpointer(BaseCheckpointer):
         from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 
         conn_string = _asyncpg_to_psycopg(settings.database_url)
-        # Use a small pool — checkpoint writes are infrequent
-        self._saver = AsyncPostgresSaver.from_conn_string(
-            conn_string,
-            pool_size=2,
-        )
-        await self._saver.setup()
-        logger.info(
-            "PostgresCheckpointer: tables ready (separate psycopg3 pool, size=2)"
-        )
+
+        # `from_conn_string` may return an async context manager. Support
+        # both shapes: context manager or direct saver object.
+        ctx_or_saver = AsyncPostgresSaver.from_conn_string(conn_string)
+
+        # If it's an async context manager, enter it and keep the context
+        # around for proper shutdown. Otherwise use the returned saver.
+        if hasattr(ctx_or_saver, "__aenter__"):
+            self._saver_ctx = ctx_or_saver
+            self._saver = await self._saver_ctx.__aenter__()
+        else:
+            self._saver = ctx_or_saver
+
+        # Some saver implementations require an explicit setup call.
+        if hasattr(self._saver, "setup"):
+            await self._saver.setup()
+
+        logger.info("PostgresCheckpointer: tables ready (separate psycopg3 pool)")
 
     async def teardown(self) -> None:
         """Close the underlying connection pool."""
         if self._saver is not None:
             try:
-                await self._saver.conn.close()
+                # If we entered a context manager, exit it to allow the
+                # saver to clean up resources. Otherwise, attempt to close
+                # the underlying connection if available.
+                if self._saver_ctx is not None and hasattr(self._saver_ctx, "__aexit__"):
+                    await self._saver_ctx.__aexit__(None, None, None)
+                elif hasattr(self._saver, "conn"):
+                    await self._saver.conn.close()
             except Exception:
                 logger.warning("PostgresCheckpointer teardown error", exc_info=True)
             self._saver = None
+            self._saver_ctx = None
 
     def get_saver(self) -> Any:
         if self._saver is None:
