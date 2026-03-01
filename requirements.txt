@@ -1,20 +1,38 @@
 # Core
-python-telegram-bot>=21.0
-python-telegram-bot[job-queue]>=21.0
-sqlalchemy[asyncio]>=2.0
-asyncpg>=0.29.0
-pgvector>=0.3.0
-pydantic>=2.0
-pydantic-settings>=2.0
-httpx>=0.27.0
-fastapi>=0.115.0
-uvicorn[standard]>=0.30.0
-openai>=1.0.0
+python-telegram-bot>=21.0,<22.0
+python-telegram-bot[job-queue]>=21.0,<22.0
+sqlalchemy[asyncio]>=2.0,<3.0
+asyncpg>=0.29.0,<1.0
+pgvector>=0.3.0,<1.0
+pydantic>=2.0,<3.0
+pydantic-settings>=2.0,<3.0
+httpx>=0.27.0,<1.0
+fastapi>=0.115.0,<1.0
+uvicorn[standard]>=0.30.0,<1.0
+openai>=1.0.0,<2.0
+
+# Agentic core (LangGraph)
+langgraph>=1.0.6,<2.0
+langgraph-checkpoint>=4.0.0,<5.0
+langgraph-checkpoint-postgres>=3.0.0,<4.0
+langgraph-checkpoint-sqlite>=3.0.0,<4.0
+psycopg[binary]>=3.1.0,<4.0
+
+# Agentic optional: tracing & metrics
+# Install with: pip install langfuse prometheus-client
+langfuse>=3.0.0,<4.0;python_version>="3.12"
+prometheus-client>=0.20.0,<1.0
 
 # Migrations
-alembic>=1.13.0
-psycopg2-binary>=2.9.0
+alembic>=1.13.0,<2.0
+psycopg2-binary>=2.9.0,<3.0
 
 # Testing
-pytest>=8.0
-pytest-asyncio>=0.23.0
+pytest>=8.0,<9.0
+pytest-asyncio>=0.23.0,<1.0
+
+# Voice (STT + TTS) — optional, only needed when VOICE_ENABLED=true
+# Install with: pip install -r requirements-voice.txt
+
+# LLM Providers
+xai-sdk>=1.6.0,<2.0

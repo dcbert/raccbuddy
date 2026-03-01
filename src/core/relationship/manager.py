@@ -50,7 +50,12 @@ class RelationshipManager:
         logger.info(
             "Relationship score for contact %d: %d "
             "(freq=%.0f rec=%.0f sent=%.0f reply=%.0f)",
-            contact_id, score, freq, rec, sent, reply,
+            contact_id,
+            score,
+            freq,
+            rec,
+            sent,
+            reply,
         )
         return score
 
@@ -63,11 +68,15 @@ class RelationshipManager:
         from src.core.db.models import Message
         from src.core.db.session import get_session
 
-        cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=_WINDOW_DAYS)
+        cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(
+            days=_WINDOW_DAYS
+        )
 
         async with get_session() as session:
             result = await session.execute(
-                select(func.count()).select_from(Message).where(
+                select(func.count())
+                .select_from(Message)
+                .where(
                     Message.from_contact_id == contact_id,
                     Message.timestamp >= cutoff,
                 )
@@ -104,7 +113,9 @@ class RelationshipManager:
         from src.core.db.models import MoodEntry
         from src.core.db.session import get_session
 
-        cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=_WINDOW_DAYS)
+        cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(
+            days=_WINDOW_DAYS
+        )
 
         async with get_session() as session:
             result = await session.execute(
@@ -126,11 +137,15 @@ class RelationshipManager:
         from src.core.db.models import Message
         from src.core.db.session import get_session
 
-        cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=_WINDOW_DAYS)
+        cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(
+            days=_WINDOW_DAYS
+        )
 
         async with get_session() as session:
             r1 = await session.execute(
-                select(func.count()).select_from(Message).where(
+                select(func.count())
+                .select_from(Message)
+                .where(
                     Message.from_contact_id == contact_id,
                     Message.timestamp >= cutoff,
                 )
@@ -138,7 +153,9 @@ class RelationshipManager:
             contact_msgs = r1.scalar_one() or 0
 
             r2 = await session.execute(
-                select(func.count()).select_from(Message).where(
+                select(func.count())
+                .select_from(Message)
+                .where(
                     Message.chat_id == owner_id,
                     Message.from_contact_id.is_(None),
                     Message.timestamp >= cutoff,

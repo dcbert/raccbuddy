@@ -36,7 +36,8 @@ async def reject_non_owner(update: Update) -> bool:
         return False
 
     logger.warning(
-        "Unauthorized access attempt by user %d", update.effective_user.id,
+        "Unauthorized access attempt by user %d",
+        update.effective_user.id,
     )
     if update.message:
         await update.message.reply_text(_NOT_OWNER_MSG)

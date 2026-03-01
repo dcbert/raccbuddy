@@ -1,0 +1,19 @@
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+filterwarnings = [
+    # websockets.legacy deprecation from python-telegram-bot transitive dep
+    "ignore:websockets\\.legacy is deprecated:DeprecationWarning",
+    # websockets.server.WebSocketServerProtocol deprecation (uvicorn)
+    "ignore:websockets\\.server\\.WebSocketServerProtocol is deprecated:DeprecationWarning",
+    # uvicorn thread started during skill-loader tests
+    "ignore::pytest.PytestUnhandledThreadExceptionWarning",
+    # GC-collected coroutines from AsyncMock session.add() / unawaited child mocks
+    "ignore:coroutine 'AsyncMockMixin._execute_mock_call' was never awaited:RuntimeWarning",
+    "ignore::pytest.PytestUnraisableExceptionWarning",
+]
+
+[dependency-groups]
+dev = [
+    "black>=26.1.0",
+    "ruff>=0.15.4",
+]

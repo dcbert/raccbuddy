@@ -11,14 +11,20 @@ import datetime
 import logging
 from collections import Counter
 
-from sqlalchemy import func, select
-
-from src.core.config import settings
+from sqlalchemy import select
 
 logger = logging.getLogger(__name__)
 
 _MIN_MESSAGES_FOR_PATTERN = 5
-_DOW_LABELS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+_DOW_LABELS = [
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+    "Sunday",
+]
 
 
 class HabitDetector:
@@ -29,7 +35,9 @@ class HabitDetector:
         from src.core.db.models import Message
         from src.core.db.session import get_session
 
-        cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=30)
+        cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(
+            days=30
+        )
 
         async with get_session() as session:
             result = await session.execute(
@@ -63,13 +71,15 @@ class HabitDetector:
         for bucket, count in hour_counts.most_common(2):
             ratio = count / total
             if ratio >= 0.35:
-                habits.append({
-                    "trigger": f"Most active in the {bucket}",
-                    "category": "timing",
-                    "frequency": round(ratio, 2),
-                    "confidence": min(1.0, ratio + 0.1),
-                    "suggestion": f"You tend to chat most in the {bucket} — plan deep work around that!",
-                })
+                habits.append(
+                    {
+                        "trigger": f"Most active in the {bucket}",
+                        "category": "timing",
+                        "frequency": round(ratio, 2),
+                        "confidence": min(1.0, ratio + 0.1),
+                        "suggestion": f"You tend to chat most in the {bucket} — plan deep work around that!",
+                    }
+                )
 
         # --- Day-of-week clustering ---
         dow_counts: Counter[int] = Counter()
@@ -80,13 +90,15 @@ class HabitDetector:
             ratio = count / total
             if ratio >= 0.20:
                 day_name = _DOW_LABELS[dow]
-                habits.append({
-                    "trigger": f"Heavy messaging on {day_name}s",
-                    "category": "day_pattern",
-                    "frequency": round(ratio, 2),
-                    "confidence": min(1.0, ratio + 0.05),
-                    "suggestion": f"You're especially chatty on {day_name}s.",
-                })
+                habits.append(
+                    {
+                        "trigger": f"Heavy messaging on {day_name}s",
+                        "category": "day_pattern",
+                        "frequency": round(ratio, 2),
+                        "confidence": min(1.0, ratio + 0.05),
+                        "suggestion": f"You're especially chatty on {day_name}s.",
+                    }
+                )
 
         return habits
 
@@ -100,9 +112,12 @@ class HabitDetector:
 
         async with get_session() as session:
             result = await session.execute(
-                select(Summary.summary_text).where(
+                select(Summary.summary_text)
+                .where(
                     Summary.date >= cutoff,
-                ).order_by(Summary.date.desc()).limit(10)
+                )
+                .order_by(Summary.date.desc())
+                .limit(10)
             )
             texts = result.scalars().all()
 
@@ -165,13 +180,15 @@ class HabitDetector:
                 suggestion = parts[1].replace("SUGGESTION:", "").strip()
 
             if trigger:
-                habits.append({
-                    "trigger": trigger[:200],
-                    "category": "llm_detected",
-                    "frequency": 0.0,
-                    "confidence": 0.6,
-                    "suggestion": suggestion[:500] or None,
-                })
+                habits.append(
+                    {
+                        "trigger": trigger[:200],
+                        "category": "llm_detected",
+                        "frequency": 0.0,
+                        "confidence": 0.6,
+                        "suggestion": suggestion[:500] or None,
+                    }
+                )
         return habits
 
     @staticmethod

@@ -2,25 +2,52 @@
 
 Runs the Telegram bot and the REST API (FastAPI) concurrently so that
 external bridges (WhatsApp, etc.) can push messages into the core.
+
+Lifecycle
+---------
+1. ``post_init``   — DB init, skill/plugin loading, job scheduling.
+2. ``post_shutdown`` — Flush all dirty state to DB, teardown plugins.
 """
+
+from __future__ import annotations
 
 import logging
 import threading
 
 import uvicorn
-from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    ContextTypes,
+    MessageHandler,
+    filters,
+)
 
 from src.api import api
 from src.core.config import settings
 from src.core.db import init_db
 from src.core.memory import memory
 from src.core.nudges import run_nudge_skills
-from src.core.plugin_loader import load_user_plugins, register_all_with_app
+from src.core.plugin_loader import (
+    load_user_plugins,
+    register_all_with_app,
+    teardown_all_plugins,
+)
 from src.core.scheduled import restore_pending_jobs, set_app_reference
+from src.core.skills.base import load_cooldowns_from_db
 from src.core.skills.loader import load_all_user_skills
 from src.core.state import flush_all_dirty, load_all_states
-from src.handlers.chat import analyze_handler, chat_handler, contacts_handler, insights_handler, name_handler, relationship_handler, skills_handler
+from src.handlers.chat import (
+    analyze_handler,
+    chat_handler,
+    contacts_handler,
+    insights_handler,
+    name_handler,
+    relationship_handler,
+    skills_handler,
+)
 from src.handlers.start import start_handler
+from src.handlers.voice import voice_handler
 from src.summarizer import summarize_all_contacts
 
 logging.basicConfig(
@@ -28,6 +55,12 @@ logging.basicConfig(
     level=logging.INFO,
 )
 logger = logging.getLogger(__name__)
+
+# Suppress INFO logs from Telegram library (keep only WARNING and above)
+logging.getLogger("telegram").setLevel(logging.WARNING)
+logging.getLogger("httpx").setLevel(
+    logging.WARNING
+)  # Telegram uses httpx for API calls
 
 
 async def post_init(application: Application) -> None:
@@ -38,6 +71,11 @@ async def post_init(application: Application) -> None:
 
     # Restore persistent state from DB
     await load_all_states()
+
+    # Restore nudge cooldowns so nudges don't spam immediately after restart
+    loaded_cooldowns = await load_cooldowns_from_db()
+    if loaded_cooldowns:
+        logger.info("Restored %d nudge cooldown(s) from DB", loaded_cooldowns)
 
     # Load user-provided nudge and chat skills from nudges/ and skills/
     loaded = load_all_user_skills()
@@ -58,13 +96,14 @@ async def post_init(application: Application) -> None:
     if restored:
         logger.info("Restored %d pending scheduled jobs", restored)
 
-    # Schedule periodic nudge checks
+    # Schedule periodic nudge checks (skip when agentic handles it)
     if application.job_queue:
-        application.job_queue.run_repeating(
-            nudge_job,
-            interval=settings.nudge_check_interval_minutes * 60,
-            first=60,
-        )
+        if not settings.agentic_enabled:
+            application.job_queue.run_repeating(
+                nudge_job,
+                interval=settings.nudge_check_interval_minutes * 60,
+                first=60,
+            )
         # Daily summarization job (every 6 hours)
         application.job_queue.run_repeating(
             summary_job,
@@ -78,6 +117,30 @@ async def post_init(application: Application) -> None:
             first=120,
         )
         logger.info("Nudge, summary, and state-flush schedulers started")
+
+    # Initialize agentic subsystem (opt-in via AGENTIC_ENABLED=true)
+    if settings.agentic_enabled:
+        from src.core.agentic import init_agentic
+
+        await init_agentic()
+        if application.job_queue:
+            application.job_queue.run_repeating(
+                agentic_job,
+                interval=settings.agentic_cycle_interval_minutes * 60,
+                first=120,
+            )
+            logger.info(
+                "Agentic cycle scheduled (every %d min)",
+                settings.agentic_cycle_interval_minutes,
+            )
+
+
+async def agentic_job(context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Periodic job — run one agentic proactive cycle."""
+    if context.bot:
+        from src.core.agentic.engine import run_agentic_cycle
+
+        await run_agentic_cycle(context.bot)
 
 
 async def nudge_job(context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -114,6 +177,33 @@ async def state_flush_job(context: ContextTypes.DEFAULT_TYPE) -> None:
         logger.warning("State flush job failed", exc_info=True)
 
 
+async def post_shutdown(application: Application) -> None:
+    """Flush all state and teardown plugins on graceful shutdown (SIGTERM)."""
+    logger.info("RaccBuddy shutting down — flushing state and tearing down plugins…")
+    try:
+        await flush_all_dirty()
+        logger.info("All dirty state flushed to DB")
+    except Exception:
+        logger.warning("State flush on shutdown failed", exc_info=True)
+
+    if settings.agentic_enabled:
+        try:
+            from src.core.agentic import shutdown_agentic
+
+            await shutdown_agentic()
+            logger.info("Agentic subsystem torn down")
+        except Exception:
+            logger.warning("Agentic teardown on shutdown failed", exc_info=True)
+
+    try:
+        await teardown_all_plugins()
+        logger.info("All plugins torn down")
+    except Exception:
+        logger.warning("Plugin teardown on shutdown failed", exc_info=True)
+
+    logger.info("RaccBuddy shutdown complete 🦝")
+
+
 def _start_api_server() -> None:
     """Run the FastAPI server in a background thread.
 
@@ -143,6 +233,7 @@ def main() -> None:
         Application.builder()
         .token(settings.telegram_bot_token)
         .post_init(post_init)
+        .post_shutdown(post_shutdown)
         .build()
     )
 
@@ -157,6 +248,9 @@ def main() -> None:
 
     # Message handler for all non-command text (including forwarded)
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, chat_handler))
+
+    # Voice message handler (voice notes + audio files)
+    app.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, voice_handler))
 
     logger.info("RaccBuddy is starting... 🦝")
     app.run_polling()

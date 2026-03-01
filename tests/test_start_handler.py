@@ -15,7 +15,10 @@ class TestStartHandler:
         """When no owner is configured, show Telegram ID in welcome."""
         from src.core.config import Settings
 
-        with patch("src.handlers.start.settings", Settings(telegram_bot_token="t", owner_telegram_id=0)):
+        with patch(
+            "src.handlers.start.settings",
+            Settings(telegram_bot_token="t", owner_telegram_id=0),
+        ):
             update = MagicMock()
             update.effective_user.first_name = "Davide"
             update.effective_user.id = 123
@@ -32,7 +35,10 @@ class TestStartHandler:
     async def test_configured_owner_gets_short_welcome(self) -> None:
         from src.core.config import Settings
 
-        with patch("src.handlers.start.settings", Settings(telegram_bot_token="t", owner_telegram_id=123)):
+        with patch(
+            "src.handlers.start.settings",
+            Settings(telegram_bot_token="t", owner_telegram_id=123),
+        ):
             update = MagicMock()
             update.effective_user.first_name = "Davide"
             update.effective_user.id = 123
@@ -46,7 +52,10 @@ class TestStartHandler:
     async def test_non_owner_rejected(self) -> None:
         from src.core.config import Settings
 
-        with patch("src.handlers.start.settings", Settings(telegram_bot_token="t", owner_telegram_id=123)):
+        with patch(
+            "src.handlers.start.settings",
+            Settings(telegram_bot_token="t", owner_telegram_id=123),
+        ):
             update = MagicMock()
             update.effective_user.first_name = "Stranger"
             update.effective_user.id = 999
@@ -60,7 +69,10 @@ class TestStartHandler:
     async def test_uses_friend_fallback(self) -> None:
         from src.core.config import Settings
 
-        with patch("src.handlers.start.settings", Settings(telegram_bot_token="t", owner_telegram_id=0)):
+        with patch(
+            "src.handlers.start.settings",
+            Settings(telegram_bot_token="t", owner_telegram_id=0),
+        ):
             update = MagicMock()
             update.effective_user.first_name = None
             update.effective_user.id = 456

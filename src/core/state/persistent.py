@@ -148,10 +148,13 @@ async def load_all_states() -> None:
 
         logger.info(
             "Loaded %d user states, %d contact states from DB",
-            len(_states), len(_contact_states),
+            len(_states),
+            len(_contact_states),
         )
     except Exception:
-        logger.warning("Failed to load persistent states — starting fresh", exc_info=True)
+        logger.warning(
+            "Failed to load persistent states — starting fresh", exc_info=True
+        )
 
 
 async def flush_state(user_id: int) -> None:
@@ -179,14 +182,16 @@ async def flush_state(user_id: int) -> None:
                 existing.streak_days = state.streak_days
                 existing.extra = state.extra
             else:
-                session.add(PersistentUserState(
-                    user_id=state.user_id,
-                    mood=state.mood,
-                    last_active=state.last_active,
-                    message_count_today=state.message_count_today,
-                    streak_days=state.streak_days,
-                    extra=state.extra,
-                ))
+                session.add(
+                    PersistentUserState(
+                        user_id=state.user_id,
+                        mood=state.mood,
+                        last_active=state.last_active,
+                        message_count_today=state.message_count_today,
+                        streak_days=state.streak_days,
+                        extra=state.extra,
+                    )
+                )
             await session.commit()
         state._dirty = False
     except Exception:
@@ -219,20 +224,24 @@ async def flush_contact_state(owner_id: int, contact_id: int) -> None:
                 existing.message_count = state.message_count
                 existing.mood = state.mood
             else:
-                session.add(PersistentContactState(
-                    owner_id=state.owner_id,
-                    contact_id=state.contact_id,
-                    score=state.score,
-                    last_message_at=state.last_message_at,
-                    message_count=state.message_count,
-                    mood=state.mood,
-                ))
+                session.add(
+                    PersistentContactState(
+                        owner_id=state.owner_id,
+                        contact_id=state.contact_id,
+                        score=state.score,
+                        last_message_at=state.last_message_at,
+                        message_count=state.message_count,
+                        mood=state.mood,
+                    )
+                )
             await session.commit()
         state._dirty = False
     except Exception:
         logger.warning(
             "Failed to flush contact state for owner=%d contact=%d",
-            owner_id, contact_id, exc_info=True,
+            owner_id,
+            contact_id,
+            exc_info=True,
         )
 
 

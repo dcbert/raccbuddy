@@ -23,7 +23,7 @@ class TestMain:
         mock_settings.nudge_check_interval_minutes = 60
 
         mock_app = MagicMock()
-        mock_app_cls.builder.return_value.token.return_value.post_init.return_value.build.return_value = (
+        mock_app_cls.builder.return_value.token.return_value.post_init.return_value.post_shutdown.return_value.build.return_value = (
             mock_app
         )
 

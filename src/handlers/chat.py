@@ -11,15 +11,39 @@ from telegram.ext import ContextTypes
 
 from src.core.auth import reject_non_owner
 from src.core.config import settings
-from src.core.db import Contact, get_all_contacts_all_platforms, get_contact_by_name_any_platform, get_relationship, save_message, upsert_contact
-from src.core.llm import SYSTEM_PROMPT, generate, generate_with_tools, provider_supports_tools
-from src.core.memory import memory
+from src.core.db import (
+    Contact,
+    get_all_contacts_all_platforms,
+    get_contact_by_name_any_platform,
+    get_relationship,
+    save_message,
+    upsert_contact,
+)
+from src.core.llm import (
+    SYSTEM_PROMPT,
+    generate,
+    generate_chat,
+    generate_with_tools,
+    provider_supports_tools,
+)
+from src.core.memory.context_builder import context_builder
 from src.core.relationship import relationship_manager
 from src.core.sentiment import mood_analyzer
 from src.core.skills.base import get_registered_skills as get_registered_nudge_skills
-from src.core.skills.chat import collect_system_prompt_fragments, get_registered_chat_skills, run_post_processors, run_pre_processors
-from src.core.state import flush_contact_state, flush_state, get_contact_state, get_state, update_contact_state
-from src.core.tools import TOOL_SCHEMAS, execute_tool, get_all_tool_schemas, parse_tool_arguments
+from src.core.skills.chat import (
+    collect_system_prompt_fragments,
+    get_registered_chat_skills,
+    run_post_processors,
+    run_pre_processors,
+)
+from src.core.state import (
+    flush_contact_state,
+    flush_state,
+    get_contact_state,
+    get_state,
+    update_contact_state,
+)
+from src.core.tools import execute_tool, get_all_tool_schemas
 
 logger = logging.getLogger(__name__)
 
@@ -106,19 +130,36 @@ async def chat_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         # Run chat-skill pre-processors
         text = await run_pre_processors(text, owner)
 
-        ctx = await memory.get_relevant_context(owner, contact_id, text)
+        system = _build_system_prompt()
 
         if provider_supports_tools():
+            ctx = await context_builder.build(owner, contact_id, text)
             reply = await _generate_with_tool_loop(ctx, text, owner)
         else:
-            # Extend system prompt with chat-skill fragments
-            system = _build_system_prompt()
-            reply = await generate(ctx, system=system)
+            # Use proper multi-turn messages for conversation coherence
+            messages = await context_builder.build_messages(
+                owner,
+                contact_id,
+                text,
+                system,
+            )
+            reply = await generate_chat(messages)
 
         # Run chat-skill post-processors
         reply = await run_post_processors(reply, owner)
 
         await update.message.reply_text(reply)
+
+        # Persist bot reply for conversation history
+        try:
+            await save_message(
+                platform="telegram",
+                chat_id=chat_id,
+                text_content=reply,
+                is_bot_reply=True,
+            )
+        except Exception:
+            logger.warning("Failed to save bot reply", exc_info=True)
     except Exception:
         logger.exception("Failed to generate reply for user %d", user_id)
         await update.message.reply_text(
@@ -127,7 +168,9 @@ async def chat_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 
 async def _enrich_after_message(
-    text: str, owner_id: int, contact_id: int | None,
+    text: str,
+    owner_id: int,
+    contact_id: int | None,
 ) -> None:
     """Run lightweight enrichment after a message is saved.
 
@@ -144,6 +187,7 @@ async def _enrich_after_message(
 
         # Update user-level mood
         from src.core.state import update_state
+
         update_state(owner_id, mood=mood)
 
         # Update contact-level mood
@@ -226,7 +270,6 @@ async def name_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         return
 
     user_id = update.effective_user.id
-    owner = _owner_id() or user_id
     args = context.args
 
     if not args:
@@ -270,13 +313,12 @@ async def analyze_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     contact = await _resolve_contact_by_name(owner, name)
     if not contact:
         await update.message.reply_text(
-            f"I don't know anyone called {name}. "
-            "Forward me their messages first! 🦝"
+            f"I don't know anyone called {name}. " "Forward me their messages first! 🦝"
         )
         return
 
     try:
-        ctx = await memory.get_relevant_context(
+        ctx = await context_builder.build(
             owner,
             contact.id,
             f"Analyze my relationship with {name}",
@@ -315,13 +357,12 @@ async def insights_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     contact = await _resolve_contact_by_name(owner, name)
     if not contact:
         await update.message.reply_text(
-            f"I don't know anyone called {name}. "
-            "Forward me their messages first! 🦝"
+            f"I don't know anyone called {name}. " "Forward me their messages first! 🦝"
         )
         return
 
     try:
-        ctx = await memory.get_relevant_context(
+        ctx = await context_builder.build(
             owner,
             contact.id,
             f"Insights about {name}",
@@ -373,7 +414,8 @@ async def relationship_handler(
 
 
 async def contacts_handler(
-    update: Update, context: ContextTypes.DEFAULT_TYPE,
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
 ) -> None:
     """Handle /contacts — list all known contacts across platforms."""
     if not update.message or not update.effective_user:
@@ -402,7 +444,6 @@ async def contacts_handler(
 # -------------------------------------------------------------------
 # Tool-calling loop for advanced providers
 # -------------------------------------------------------------------
-MAX_TOOL_ROUNDS = 10
 
 
 async def _generate_with_tool_loop(
@@ -431,7 +472,7 @@ async def _generate_with_tool_loop(
 
     all_tools = get_all_tool_schemas()
 
-    for _round in range(MAX_TOOL_ROUNDS):
+    for _round in range(settings.max_tool_rounds):
         result = await generate_with_tools(messages, all_tools)
 
         if result.finished and not result.tool_calls:
@@ -458,17 +499,23 @@ async def _generate_with_tool_loop(
         # Execute each tool and feed results back
         for tc in result.tool_calls:
             logger.info(
-                "LLM tool call: %s(%s)", tc.name, tc.arguments,
+                "LLM tool call: %s(%s)",
+                tc.name,
+                tc.arguments,
             )
             tool_result = await execute_tool(tc.name, tc.arguments, owner_id)
-            messages.append({
-                "role": "tool",
-                "tool_call_id": tc.id,
-                "content": tool_result,
-            })
+            messages.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": tc.id,
+                    "content": tool_result,
+                }
+            )
 
     # Exhausted rounds — ask for a final answer without tools
-    logger.warning("Tool loop hit %d rounds, forcing final answer", MAX_TOOL_ROUNDS)
+    logger.warning(
+        "Tool loop hit %d rounds, forcing final answer", settings.max_tool_rounds
+    )
     result = await generate_with_tools(messages, [])
     return result.text or "🦝"
 
@@ -497,7 +544,8 @@ def _build_system_prompt() -> str:
 
 
 async def skills_handler(
-    update: Update, context: ContextTypes.DEFAULT_TYPE,
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
 ) -> None:
     """Handle /skills — list all registered chat and nudge skills."""
     if not update.message or not update.effective_user:

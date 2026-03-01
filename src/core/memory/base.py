@@ -15,7 +15,12 @@ stored in PostgreSQL (with pgvector for semantic retrieval):
 
 Token efficiency
 ~~~~~~~~~~~~~~~~
-Every retrieval path enforces ``MAX_CONTEXT_TOKENS`` (default 2 000).
+Every retrieval path respects ``settings.max_context_tokens``
+(default 30 000).  Budget fractions and retrieval limits are all
+driven by ``settings.memory_*`` config keys.
+
+Context assembly is delegated to ``ContextBuilder`` in
+``src/core/memory/context_builder.py`` for clean separation of concerns.
 
 Privacy
 ~~~~~~~
@@ -27,13 +32,19 @@ from __future__ import annotations
 import datetime
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any
 
 from sqlalchemy import delete, desc, func, select, text
 
 from src.core.config import settings
-from src.core.db.crud import get_all_contacts_all_platforms, get_contact_name, get_recent_messages, get_recent_messages_for_contact, get_relevant_summaries
-from src.core.db.models import Base, Message, OwnerMemory, SemanticMemory, Summary
+from src.core.db.crud import (
+    get_all_contacts_all_platforms,
+    get_contact_name,
+    get_recent_messages,
+    get_recent_messages_for_contact,
+    get_relevant_summaries,
+)
+from src.core.db.models import Base, Message, OwnerMemory, SemanticMemory
 from src.core.db.session import get_session
 from src.core.llm.interface import embed
 from src.core.state.persistent import get_contact_state, get_state
@@ -44,19 +55,21 @@ logger = logging.getLogger(__name__)
 # Constants
 # ---------------------------------------------------------------------------
 
-EMBED_DIMENSIONS = 768
+# Approximate characters per token — used to convert token budgets to char
+# limits for safe string slicing without a full tokeniser.
+CHARS_PER_TOKEN: int = 4
 
-MAX_RECENT_MESSAGES = 5
-MAX_SUMMARIES = 3
-CHARS_PER_TOKEN = 4
-MAX_CONTEXT_CHARS = settings.max_context_tokens * CHARS_PER_TOKEN
+OWNER_MEMORY_DEFAULT_IMPORTANCE: int = 8
+OWNER_MEMORY_PRUNE_FLOOR: int = 7
 
-_OWNER_MEM_BUDGET = 0.30
-_CONTACT_MEM_BUDGET = 0.30
-_EPISODIC_BUDGET = 0.40
 
-OWNER_MEMORY_DEFAULT_IMPORTANCE = 8
-OWNER_MEMORY_PRUNE_FLOOR = 7
+def _context_budget_chars(max_tokens: int | None = None) -> int:
+    """Return the character budget for the full context window.
+
+    Computed dynamically from ``settings.max_context_tokens`` so changes
+    to the config are reflected without a restart.
+    """
+    return (max_tokens or settings.max_context_tokens) * CHARS_PER_TOKEN
 
 
 # ---------------------------------------------------------------------------
@@ -167,7 +180,9 @@ class PostgresMemory:
             await session.refresh(mem)
         logger.debug(
             "Saved semantic memory (contact=%s, imp=%d): %.60s…",
-            contact_id, importance, content,
+            contact_id,
+            importance,
+            content,
         )
         return mem
 
@@ -190,9 +205,13 @@ class PostgresMemory:
         try:
             existing = await self._find_duplicate_owner_memory(owner_id, emb)
             if existing is not None:
-                return await self._merge_owner_memory(existing, content, importance, metadata)
+                return await self._merge_owner_memory(
+                    existing, content, importance, metadata
+                )
         except Exception:
-            logger.warning("Owner memory dedup check failed; inserting as new", exc_info=True)
+            logger.warning(
+                "Owner memory dedup check failed; inserting as new", exc_info=True
+            )
 
         mem = OwnerMemory(
             owner_id=owner_id,
@@ -208,7 +227,9 @@ class PostgresMemory:
             await session.refresh(mem)
         logger.info(
             "Owner memory saved (cat=%s, imp=%d): %.80s…",
-            category, importance, content,
+            category,
+            importance,
+            content,
         )
         return mem
 
@@ -232,7 +253,8 @@ class PostgresMemory:
             if row and row.sim >= threshold:
                 logger.debug(
                     "Found duplicate owner memory (sim=%.3f): %.60s…",
-                    row.sim, row.OwnerMemory.content,
+                    row.sim,
+                    row.OwnerMemory.content,
                 )
                 return row.OwnerMemory
         return None
@@ -268,7 +290,9 @@ class PostgresMemory:
                 await session.refresh(merged)
                 logger.info(
                     "Owner memory merged (id=%d, imp=%d): %.80s…",
-                    merged.id, merged_importance, merged_content,
+                    merged.id,
+                    merged_importance,
+                    merged_content,
                 )
                 return merged
 
@@ -301,44 +325,44 @@ class PostgresMemory:
                 SemanticMemory.content_search,
                 func.plainto_tsquery("english", query),
             ).label("fts_score")
-            combined_score = (0.7 * vec_score_expr + 0.3 * fts_score_expr).label("combined_score")
+            combined_score = (0.7 * vec_score_expr + 0.3 * fts_score_expr).label(
+                "combined_score"
+            )
 
-            sem_stmt = (
-                select(
-                    SemanticMemory.content,
-                    SemanticMemory.importance,
-                    SemanticMemory.category,
-                    SemanticMemory.created_at,
-                    SemanticMemory.metadata_,
-                    vec_score_expr,
-                    fts_score_expr,
-                    combined_score,
-                )
-                .where(
-                    SemanticMemory.owner_id == owner_id,
-                    SemanticMemory.importance >= min_importance,
-                )
+            sem_stmt = select(
+                SemanticMemory.content,
+                SemanticMemory.importance,
+                SemanticMemory.category,
+                SemanticMemory.created_at,
+                SemanticMemory.metadata_,
+                vec_score_expr,
+                fts_score_expr,
+                combined_score,
+            ).where(
+                SemanticMemory.owner_id == owner_id,
+                SemanticMemory.importance >= min_importance,
             )
             if contact_id is not None:
                 sem_stmt = sem_stmt.where(
                     SemanticMemory.contact_id == contact_id,
                 )
 
-            sem_stmt = sem_stmt.order_by(
-                desc(combined_score)
-            ).limit(k)
+            sem_stmt = sem_stmt.order_by(desc(combined_score)).limit(k)
 
             try:
                 sem_rows = (await session.execute(sem_stmt)).all()
                 for row in sem_rows:
-                    documents.append(Document(
-                        content=row.content,
-                        score=0.7 * (row.vec_score or 0) + 0.3 * (row.fts_score or 0),
-                        importance=row.importance,
-                        source="semantic",
-                        created_at=row.created_at,
-                        metadata=row.metadata_ or {},
-                    ))
+                    documents.append(
+                        Document(
+                            content=row.content,
+                            score=0.7 * (row.vec_score or 0)
+                            + 0.3 * (row.fts_score or 0),
+                            importance=row.importance,
+                            source="semantic",
+                            created_at=row.created_at,
+                            metadata=row.metadata_ or {},
+                        )
+                    )
             except Exception:
                 logger.warning("Semantic hybrid search failed", exc_info=True)
 
@@ -351,7 +375,9 @@ class PostgresMemory:
                     OwnerMemory.content_search,
                     func.plainto_tsquery("english", query),
                 ).label("fts_score")
-                own_combined_score = (0.7 * own_vec_score + 0.3 * own_fts_score).label("combined_score")
+                own_combined_score = (0.7 * own_vec_score + 0.3 * own_fts_score).label(
+                    "combined_score"
+                )
 
                 own_stmt = (
                     select(
@@ -368,22 +394,23 @@ class PostgresMemory:
                         OwnerMemory.owner_id == owner_id,
                         OwnerMemory.importance >= min_importance,
                     )
-                    .order_by(
-                        desc(own_combined_score)
-                    )
+                    .order_by(desc(own_combined_score))
                     .limit(k)
                 )
                 try:
                     own_rows = (await session.execute(own_stmt)).all()
                     for row in own_rows:
-                        documents.append(Document(
-                            content=row.content,
-                            score=0.7 * (row.vec_score or 0) + 0.3 * (row.fts_score or 0),
-                            importance=row.importance,
-                            source="owner_memory",
-                            created_at=row.created_at,
-                            metadata=row.metadata_ or {},
-                        ))
+                        documents.append(
+                            Document(
+                                content=row.content,
+                                score=0.7 * (row.vec_score or 0)
+                                + 0.3 * (row.fts_score or 0),
+                                importance=row.importance,
+                                source="owner_memory",
+                                created_at=row.created_at,
+                                metadata=row.metadata_ or {},
+                            )
+                        )
                 except Exception:
                     logger.warning("Owner memory hybrid search failed", exc_info=True)
 
@@ -398,24 +425,61 @@ class PostgresMemory:
         self,
         owner_id: int,
         *,
-        k: int = 15,
+        query: str | None = None,
+        k: int = 8,
     ) -> str:
-        """Return formatted owner facts for prompt injection."""
-        budget = int(MAX_CONTEXT_CHARS * _OWNER_MEM_BUDGET)
+        """Return formatted owner facts for prompt injection.
+
+        When *query* is provided, facts are ranked by semantic similarity
+        to the query so only relevant knowledge is surfaced. Without a
+        query, falls back to importance + recency ordering.
+        """
+        budget = int(_context_budget_chars() * settings.memory_owner_budget_ratio)
 
         async with get_session() as session:
-            stmt = (
-                select(OwnerMemory.content, OwnerMemory.category, OwnerMemory.importance)
-                .where(OwnerMemory.owner_id == owner_id)
-                .order_by(desc(OwnerMemory.importance), desc(OwnerMemory.created_at))
-                .limit(k)
-            )
+            if query:
+                try:
+                    query_emb = await embed(query[:512])
+                    relevance = (
+                        1 - OwnerMemory.embedding.cosine_distance(query_emb)
+                    ).label("relevance")
+                    stmt = (
+                        select(
+                            OwnerMemory.content,
+                            OwnerMemory.category,
+                            OwnerMemory.importance,
+                            relevance,
+                        )
+                        .where(OwnerMemory.owner_id == owner_id)
+                        .order_by(desc(relevance))
+                        .limit(k)
+                    )
+                except Exception:
+                    logger.warning("Owner facts vector search failed, falling back")
+                    query = None  # fall through to importance ordering
+
+            if not query:
+                stmt = (
+                    select(
+                        OwnerMemory.content,
+                        OwnerMemory.category,
+                        OwnerMemory.importance,
+                    )
+                    .where(OwnerMemory.owner_id == owner_id)
+                    .order_by(
+                        desc(OwnerMemory.importance), desc(OwnerMemory.created_at)
+                    )
+                    .limit(k)
+                )
+
             rows = (await session.execute(stmt)).all()
 
         if not rows:
             return ""
 
-        lines = ["[What Raccy knows about you]"]
+        lines = [
+            "[Background knowledge about you — use only if relevant to the question]"
+        ]
         used = len(lines[0])
         for row in rows:
             line = f"- ({row.category}) {row.content}"
@@ -439,11 +503,11 @@ class PostgresMemory:
         max_tokens: int | None = None,
     ) -> str:
         """Build a token-budgeted context string for the LLM prompt."""
-        budget_chars = (max_tokens or settings.max_context_tokens) * CHARS_PER_TOKEN
+        budget_chars = _context_budget_chars(max_tokens)
         parts: list[str] = []
 
-        # 1. Owner self-memory
-        owner_facts = await self.get_owner_personal_facts(owner_id)
+        # 1. Owner self-memory (query-aware retrieval)
+        owner_facts = await self.get_owner_personal_facts(owner_id, query=query)
         if owner_facts:
             parts.append(owner_facts)
 
@@ -467,20 +531,21 @@ class PostgresMemory:
         contacts = await get_all_contacts_all_platforms(owner_id)
         if contacts:
             names = ", ".join(c.contact_name for c in contacts[:10])
-            parts.append(f"[Known contacts: {names}]")
+            parts.append(f"[Known contacts (reference only): {names}]")
 
         # 3. Semantic memories (hybrid search)
-        contact_budget = int(budget_chars * _CONTACT_MEM_BUDGET)
+        contact_budget = int(budget_chars * settings.memory_contact_budget_ratio)
         if contact_id is not None:
             try:
                 docs = await self.hybrid_search(
-                    query, owner_id,
+                    query,
+                    owner_id,
                     contact_id=contact_id,
-                    k=5,
+                    k=settings.memory_semantic_chunks,
                     include_owner_memories=False,
                 )
                 if docs:
-                    mem_lines = ["[Relevant memories]"]
+                    mem_lines = ["[Relevant memories — reference only when pertinent]"]
                     used = 0
                     for doc in docs:
                         line = f"- {doc.content[:300]}"
@@ -497,7 +562,9 @@ class PostgresMemory:
             try:
                 query_embedding = await embed(query[:512])
                 summaries = await get_relevant_summaries(
-                    contact_id, query_embedding, limit=MAX_SUMMARIES,
+                    contact_id,
+                    query_embedding,
+                    limit=settings.memory_max_summaries,
                 )
                 if summaries:
                     parts.append("[Relevant history]")
@@ -509,11 +576,13 @@ class PostgresMemory:
         # 5. Recent episodic messages
         if contact_id is not None:
             messages = await get_recent_messages_for_contact(
-                contact_id, limit=MAX_RECENT_MESSAGES,
+                contact_id,
+                limit=settings.memory_recent_messages,
             )
         else:
             messages = await get_recent_messages(
-                owner_id, limit=MAX_RECENT_MESSAGES,
+                owner_id,
+                limit=settings.memory_recent_messages,
             )
 
         if messages:
@@ -538,26 +607,22 @@ class PostgresMemory:
 
     async def prune_old_memories(self, *, days: int = 90) -> int:
         """Delete low-importance memories older than *days*."""
-        cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=days)
+        cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(
+            days=days
+        )
         deleted = 0
 
         async with get_session() as session:
-            sem_del = (
-                delete(SemanticMemory)
-                .where(
-                    SemanticMemory.importance < 5,
-                    SemanticMemory.created_at < cutoff,
-                )
+            sem_del = delete(SemanticMemory).where(
+                SemanticMemory.importance < 5,
+                SemanticMemory.created_at < cutoff,
             )
             r1 = await session.execute(sem_del)
             deleted += r1.rowcount
 
-            own_del = (
-                delete(OwnerMemory)
-                .where(
-                    OwnerMemory.importance < OWNER_MEMORY_PRUNE_FLOOR,
-                    OwnerMemory.created_at < cutoff,
-                )
+            own_del = delete(OwnerMemory).where(
+                OwnerMemory.importance < OWNER_MEMORY_PRUNE_FLOOR,
+                OwnerMemory.created_at < cutoff,
             )
             r2 = await session.execute(own_del)
             deleted += r2.rowcount
@@ -567,7 +632,9 @@ class PostgresMemory:
         if deleted:
             logger.info(
                 "Pruned %d old memories (cutoff=%s, owner floor=%d)",
-                deleted, cutoff.date(), OWNER_MEMORY_PRUNE_FLOOR,
+                deleted,
+                cutoff.date(),
+                OWNER_MEMORY_PRUNE_FLOOR,
             )
         return deleted
 
@@ -585,7 +652,9 @@ class PostgresMemory:
         """Run daily reflection to extract lasting owner facts."""
         from src.core.llm.interface import generate as llm_generate
 
-        cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=recent_hours)
+        cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(
+            hours=recent_hours
+        )
 
         async with get_session() as session:
             stmt = (
@@ -633,12 +702,19 @@ class PostgresMemory:
                 tag_end = line.index(")")
                 tag = line[1:tag_end].lower().strip()
                 allowed = {
-                    "preference", "trait", "joke", "emotion",
-                    "reflection", "fact", "goal", "routine", "boundary",
+                    "preference",
+                    "trait",
+                    "joke",
+                    "emotion",
+                    "reflection",
+                    "fact",
+                    "goal",
+                    "routine",
+                    "boundary",
                 }
                 if tag in allowed:
                     category = tag
-                line = line[tag_end + 1:].strip()
+                line = line[tag_end + 1 :].strip()
 
             if line:
                 await self.add_owner_memory(
@@ -672,5 +748,7 @@ async def build_context_for_contact(
 ) -> str:
     """Convenience wrapper around ``memory.get_relevant_context``."""
     return await memory.get_relevant_context(
-        owner_id, contact_id, current_message,
+        owner_id,
+        contact_id,
+        current_message,
     )

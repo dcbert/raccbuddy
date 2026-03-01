@@ -43,5 +43,10 @@ assets/
 # Development files
 integration_examples.py
 
+# Deployment and backup
+backups/
+deploy-to-dockerhub.sh
+restore-from-backup.sh
+
 # WhatsApp service (has its own container)
 whatsapp-service/

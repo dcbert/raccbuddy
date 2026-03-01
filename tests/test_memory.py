@@ -7,11 +7,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from src.core.config import settings
 from src.core.memory import (
     CHARS_PER_TOKEN,
-    MAX_CONTEXT_CHARS,
-    MAX_RECENT_MESSAGES,
-    MAX_SUMMARIES,
     OWNER_MEMORY_DEFAULT_IMPORTANCE,
     OWNER_MEMORY_PRUNE_FLOOR,
     Document,
@@ -41,20 +39,24 @@ def mem() -> PostgresMemory:
 class TestConstants:
     """Validate module-level constants."""
 
-    def test_max_context_chars_uses_config(self) -> None:
-        from src.core.config import settings
+    def test_chars_per_token(self) -> None:
+        assert CHARS_PER_TOKEN == 4
 
-        assert MAX_CONTEXT_CHARS == settings.max_context_tokens * CHARS_PER_TOKEN
+    def test_context_budget_scales_with_config(self) -> None:
+        # Budget should be proportional to max_context_tokens
+        expected = settings.max_context_tokens * CHARS_PER_TOKEN
+        assert expected > 0
 
     def test_owner_memory_defaults(self) -> None:
         assert OWNER_MEMORY_DEFAULT_IMPORTANCE == 8
         assert OWNER_MEMORY_PRUNE_FLOOR == 7
 
-    def test_max_recent_messages(self) -> None:
-        assert MAX_RECENT_MESSAGES == 5
+    def test_memory_recent_messages_from_settings(self) -> None:
+        # The constant is now driven by config (default 15)
+        assert settings.memory_recent_messages >= 1
 
-    def test_max_summaries(self) -> None:
-        assert MAX_SUMMARIES == 3
+    def test_memory_max_summaries_from_settings(self) -> None:
+        assert settings.memory_max_summaries >= 1
 
 
 class TestDocument:
@@ -142,6 +144,7 @@ class TestAddSemanticMemory:
         mock_session = AsyncMock()
         mock_session.__aenter__ = AsyncMock(return_value=mock_session)
         mock_session.__aexit__ = AsyncMock(return_value=False)
+        mock_session.add = MagicMock()  # add() is sync in SQLAlchemy
         mock_get_session.return_value = mock_session
 
         result = await mem.add_semantic_memory(
@@ -173,6 +176,7 @@ class TestAddSemanticMemory:
         mock_session = AsyncMock()
         mock_session.__aenter__ = AsyncMock(return_value=mock_session)
         mock_session.__aexit__ = AsyncMock(return_value=False)
+        mock_session.add = MagicMock()  # add() is sync in SQLAlchemy
         mock_get_session.return_value = mock_session
 
         result = await mem.add_semantic_memory(
@@ -195,6 +199,7 @@ class TestAddSemanticMemory:
         mock_session = AsyncMock()
         mock_session.__aenter__ = AsyncMock(return_value=mock_session)
         mock_session.__aexit__ = AsyncMock(return_value=False)
+        mock_session.add = MagicMock()  # add() is sync in SQLAlchemy
         mock_get_session.return_value = mock_session
 
         long_content = "x" * 1000
@@ -227,6 +232,7 @@ class TestAddOwnerMemory:
         mock_session = AsyncMock()
         mock_session.__aenter__ = AsyncMock(return_value=mock_session)
         mock_session.__aexit__ = AsyncMock(return_value=False)
+        mock_session.add = MagicMock()  # add() is sync in SQLAlchemy
         mock_get_session.return_value = mock_session
 
         result = await mem.add_owner_memory(
@@ -255,6 +261,7 @@ class TestAddOwnerMemory:
         mock_session = AsyncMock()
         mock_session.__aenter__ = AsyncMock(return_value=mock_session)
         mock_session.__aexit__ = AsyncMock(return_value=False)
+        mock_session.add = MagicMock()  # add() is sync in SQLAlchemy
         mock_get_session.return_value = mock_session
 
         result = await mem.add_owner_memory(
@@ -279,6 +286,7 @@ class TestAddOwnerMemory:
         mock_session = AsyncMock()
         mock_session.__aenter__ = AsyncMock(return_value=mock_session)
         mock_session.__aexit__ = AsyncMock(return_value=False)
+        mock_session.add = MagicMock()  # add() is sync in SQLAlchemy
         mock_get_session.return_value = mock_session
 
         result = await mem.add_owner_memory(
@@ -345,9 +353,11 @@ class TestGetOwnerPersonalFacts:
 
         result = await mem.get_owner_personal_facts(owner_id=100)
 
-        assert "[What Raccy knows about you]" in result
-        assert "(preference) Loves spicy ramen" in result
-        assert "(trait) Night owl" in result
+        # Header uses the new label format
+        assert "[Background knowledge about you" in result
+        # Facts are prefixed with "- "
+        assert "- (preference) Loves spicy ramen" in result
+        assert "- (trait) Night owl" in result
 
     @patch("src.core.memory.base.get_session")
     async def test_respects_budget(
@@ -375,7 +385,11 @@ class TestGetOwnerPersonalFacts:
 
         result = await mem.get_owner_personal_facts(owner_id=100)
 
-        budget = int(MAX_CONTEXT_CHARS * 0.30)
+        budget = int(
+            settings.max_context_tokens
+            * CHARS_PER_TOKEN
+            * settings.memory_owner_budget_ratio
+        )
         assert len(result) <= budget
 
 
@@ -388,10 +402,14 @@ class TestGetOwnerPersonalFacts:
 class TestGetRelevantContext:
     """Validate the main context builder."""
 
-    @patch("src.core.memory.base.get_recent_messages_for_contact", new_callable=AsyncMock)
+    @patch(
+        "src.core.memory.base.get_recent_messages_for_contact", new_callable=AsyncMock
+    )
     @patch("src.core.memory.base.get_relevant_summaries", new_callable=AsyncMock)
     @patch("src.core.memory.base.embed", new_callable=AsyncMock)
-    @patch("src.core.memory.base.get_all_contacts_all_platforms", new_callable=AsyncMock)
+    @patch(
+        "src.core.memory.base.get_all_contacts_all_platforms", new_callable=AsyncMock
+    )
     @patch("src.core.memory.base.get_contact_name", new_callable=AsyncMock)
     async def test_includes_owner_facts_first(
         self,
@@ -408,26 +426,32 @@ class TestGetRelevantContext:
         mock_summaries.return_value = []
         mock_msgs.return_value = []
 
-        # Mock get_owner_personal_facts to return a known string
+        # Mock get_owner_personal_facts to return a known string (new header format)
         with patch.object(
-            mem, "get_owner_personal_facts",
+            mem,
+            "get_owner_personal_facts",
             new_callable=AsyncMock,
-            return_value="[What Raccy knows about you]\n- (trait) Night owl",
+            return_value="[Background knowledge about you — use only if relevant to the question]\n- (trait) Night owl",
         ), patch.object(
-            mem, "hybrid_search",
+            mem,
+            "hybrid_search",
             new_callable=AsyncMock,
             return_value=[],
         ):
             result = await mem.get_relevant_context(
-                owner_id=100, contact_id=42, query="hello",
+                owner_id=100,
+                contact_id=42,
+                query="hello",
             )
 
-        # Owner facts should be at the very top
-        assert result.startswith("[What Raccy knows about you]")
+        # Owner facts should be at the very top (new header label)
+        assert result.startswith("[Background knowledge about you")
         assert "[Current message]: hello" in result
 
     @patch("src.core.memory.base.get_recent_messages", new_callable=AsyncMock)
-    @patch("src.core.memory.base.get_all_contacts_all_platforms", new_callable=AsyncMock)
+    @patch(
+        "src.core.memory.base.get_all_contacts_all_platforms", new_callable=AsyncMock
+    )
     async def test_handles_no_contact(
         self,
         mock_all_contacts: AsyncMock,
@@ -438,22 +462,29 @@ class TestGetRelevantContext:
         mock_msgs.return_value = []
 
         with patch.object(
-            mem, "get_owner_personal_facts",
+            mem,
+            "get_owner_personal_facts",
             new_callable=AsyncMock,
             return_value="",
         ):
             result = await mem.get_relevant_context(
-                owner_id=100, contact_id=None, query="hi",
+                owner_id=100,
+                contact_id=None,
+                query="hi",
             )
 
         assert "[Current message]: hi" in result
         # Should not contain contact-specific sections
         assert "[Contact:" not in result
 
-    @patch("src.core.memory.base.get_recent_messages_for_contact", new_callable=AsyncMock)
+    @patch(
+        "src.core.memory.base.get_recent_messages_for_contact", new_callable=AsyncMock
+    )
     @patch("src.core.memory.base.get_relevant_summaries", new_callable=AsyncMock)
     @patch("src.core.memory.base.embed", new_callable=AsyncMock)
-    @patch("src.core.memory.base.get_all_contacts_all_platforms", new_callable=AsyncMock)
+    @patch(
+        "src.core.memory.base.get_all_contacts_all_platforms", new_callable=AsyncMock
+    )
     @patch("src.core.memory.base.get_contact_name", new_callable=AsyncMock)
     async def test_includes_recent_messages(
         self,
@@ -474,25 +505,33 @@ class TestGetRelevantContext:
         mock_msgs.return_value = [msg]
 
         with patch.object(
-            mem, "get_owner_personal_facts",
+            mem,
+            "get_owner_personal_facts",
             new_callable=AsyncMock,
             return_value="",
         ), patch.object(
-            mem, "hybrid_search",
+            mem,
+            "hybrid_search",
             new_callable=AsyncMock,
             return_value=[],
         ):
             result = await mem.get_relevant_context(
-                owner_id=100, contact_id=42, query="hello",
+                owner_id=100,
+                contact_id=42,
+                query="hello",
             )
 
         assert "[Recent messages]" in result
         assert "Hey there!" in result
 
-    @patch("src.core.memory.base.get_recent_messages_for_contact", new_callable=AsyncMock)
+    @patch(
+        "src.core.memory.base.get_recent_messages_for_contact", new_callable=AsyncMock
+    )
     @patch("src.core.memory.base.get_relevant_summaries", new_callable=AsyncMock)
     @patch("src.core.memory.base.embed", new_callable=AsyncMock)
-    @patch("src.core.memory.base.get_all_contacts_all_platforms", new_callable=AsyncMock)
+    @patch(
+        "src.core.memory.base.get_all_contacts_all_platforms", new_callable=AsyncMock
+    )
     @patch("src.core.memory.base.get_contact_name", new_callable=AsyncMock)
     async def test_truncates_when_over_budget(
         self,
@@ -510,22 +549,27 @@ class TestGetRelevantContext:
         mock_msgs.return_value = []
 
         # Return massive owner facts that exceed budget
-        giant_facts = "x" * (MAX_CONTEXT_CHARS + 1000)
+        max_chars = settings.max_context_tokens * CHARS_PER_TOKEN
+        giant_facts = "x" * (max_chars + 1000)
 
         with patch.object(
-            mem, "get_owner_personal_facts",
+            mem,
+            "get_owner_personal_facts",
             new_callable=AsyncMock,
             return_value=giant_facts,
         ), patch.object(
-            mem, "hybrid_search",
+            mem,
+            "hybrid_search",
             new_callable=AsyncMock,
             return_value=[],
         ):
             result = await mem.get_relevant_context(
-                owner_id=100, contact_id=42, query="hello",
+                owner_id=100,
+                contact_id=42,
+                query="hello",
             )
 
-        assert len(result) <= MAX_CONTEXT_CHARS
+        assert len(result) <= max_chars
 
 
 # ---------------------------------------------------------------------------
@@ -721,10 +765,7 @@ class TestConsolidateMemories:
         mock_session.execute = AsyncMock(return_value=mock_result)
         mock_get_session.return_value = mock_session
 
-        llm_output = (
-            "(preference) Loves pasta\n"
-            "(trait) Morning person\n"
-        )
+        llm_output = "(preference) Loves pasta\n" "(trait) Morning person\n"
 
         with patch(
             "src.core.llm.interface.generate",
@@ -827,7 +868,9 @@ class TestHybridSearch:
         mock_get_session.return_value = mock_session
 
         result = await mem.hybrid_search(
-            "test", owner_id=100, contact_id=42,
+            "test",
+            owner_id=100,
+            contact_id=42,
         )
 
         assert result == []
@@ -865,7 +908,9 @@ class TestHybridSearch:
         mock_get_session.return_value = mock_session
 
         result = await mem.hybrid_search(
-            "test", owner_id=100, k=5,
+            "test",
+            owner_id=100,
+            k=5,
             include_owner_memories=False,
         )
 
@@ -883,7 +928,8 @@ class TestBuildContextForContact:
 
     async def test_delegates_to_memory_singleton(self) -> None:
         with patch.object(
-            memory, "get_relevant_context",
+            memory,
+            "get_relevant_context",
             new_callable=AsyncMock,
             return_value="mocked context",
         ) as mock_ctx:

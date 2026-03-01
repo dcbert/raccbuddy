@@ -131,7 +131,9 @@ class TestIdleSkill:
     @patch("src.core.skills.nudge.count_messages_since", new_callable=AsyncMock)
     @patch("src.core.skills.nudge.get_idle_contact_ids", new_callable=AsyncMock)
     async def test_fires_when_idle_with_activity(
-        self, mock_idle: AsyncMock, mock_count: AsyncMock,
+        self,
+        mock_idle: AsyncMock,
+        mock_count: AsyncMock,
     ) -> None:
         mock_idle.return_value = [(100, datetime.datetime.now())]
         mock_count.return_value = 5
@@ -143,7 +145,9 @@ class TestIdleSkill:
     @patch("src.core.skills.nudge.count_messages_since", new_callable=AsyncMock)
     @patch("src.core.skills.nudge.get_idle_contact_ids", new_callable=AsyncMock)
     async def test_no_fire_when_not_idle(
-        self, mock_idle: AsyncMock, mock_count: AsyncMock,
+        self,
+        mock_idle: AsyncMock,
+        mock_count: AsyncMock,
     ) -> None:
         mock_idle.return_value = []  # nobody idle
         skill = IdleSkill()
@@ -154,7 +158,9 @@ class TestIdleSkill:
     @patch("src.core.skills.nudge.count_messages_since", new_callable=AsyncMock)
     @patch("src.core.skills.nudge.get_idle_contact_ids", new_callable=AsyncMock)
     async def test_no_fire_when_idle_but_no_prior_activity(
-        self, mock_idle: AsyncMock, mock_count: AsyncMock,
+        self,
+        mock_idle: AsyncMock,
+        mock_count: AsyncMock,
     ) -> None:
         mock_idle.return_value = [(100, datetime.datetime.now())]
         mock_count.return_value = 0  # no prior messages
@@ -183,7 +189,10 @@ class TestContactQuietSkill:
         new_callable=AsyncMock,
     )
     async def test_fires_for_quiet_contact(
-        self, mock_contacts: AsyncMock, mock_last: AsyncMock, mock_count: AsyncMock,
+        self,
+        mock_contacts: AsyncMock,
+        mock_last: AsyncMock,
+        mock_count: AsyncMock,
     ) -> None:
         contact = type("C", (), {"id": 42, "contact_name": "Alice"})()
         mock_contacts.return_value = [contact]
@@ -202,7 +211,8 @@ class TestContactQuietSkill:
         new_callable=AsyncMock,
     )
     async def test_no_fire_with_no_contacts(
-        self, mock_contacts: AsyncMock,
+        self,
+        mock_contacts: AsyncMock,
     ) -> None:
         mock_contacts.return_value = []
         skill = ContactQuietSkill()
@@ -219,11 +229,17 @@ class TestEveningSkill:
     @pytest.mark.asyncio
     @patch("src.core.skills.nudge.count_messages_since", new_callable=AsyncMock)
     async def test_fires_in_evening_with_activity(
-        self, mock_count: AsyncMock,
+        self,
+        mock_count: AsyncMock,
     ) -> None:
         mock_count.return_value = 10
         now_evening = datetime.datetime(
-            2026, 2, 21, 20, 0, tzinfo=datetime.timezone.utc,
+            2026,
+            2,
+            21,
+            20,
+            0,
+            tzinfo=datetime.timezone.utc,
         )
         skill = EveningSkill()
         with patch(
@@ -238,10 +254,16 @@ class TestEveningSkill:
     @pytest.mark.asyncio
     @patch("src.core.skills.nudge.count_messages_since", new_callable=AsyncMock)
     async def test_no_fire_during_morning(
-        self, mock_count: AsyncMock,
+        self,
+        mock_count: AsyncMock,
     ) -> None:
         now_morning = datetime.datetime(
-            2026, 2, 21, 9, 0, tzinfo=datetime.timezone.utc,
+            2026,
+            2,
+            21,
+            9,
+            0,
+            tzinfo=datetime.timezone.utc,
         )
         skill = EveningSkill()
         with patch(
@@ -263,7 +285,8 @@ class TestHabitSkill:
     @pytest.mark.asyncio
     @patch("src.core.skills.nudge.get_all_habits", new_callable=AsyncMock)
     async def test_fires_when_habits_exist(
-        self, mock_habits: AsyncMock,
+        self,
+        mock_habits: AsyncMock,
     ) -> None:
         mock_habits.return_value = [object()]
         skill = HabitSkill()
@@ -273,7 +296,8 @@ class TestHabitSkill:
     @pytest.mark.asyncio
     @patch("src.core.skills.nudge.get_all_habits", new_callable=AsyncMock)
     async def test_no_fire_when_no_habits(
-        self, mock_habits: AsyncMock,
+        self,
+        mock_habits: AsyncMock,
     ) -> None:
         mock_habits.return_value = []
         skill = HabitSkill()
@@ -291,10 +315,13 @@ class TestRunNudgeSkills:
     @patch("src.core.nudges.engine.generate", new_callable=AsyncMock)
     @patch("src.core.nudges.engine.settings")
     async def test_skips_when_no_owner(
-        self, mock_settings: AsyncMock, mock_gen: AsyncMock,
+        self,
+        mock_settings: AsyncMock,
+        mock_gen: AsyncMock,
     ) -> None:
         mock_settings.owner_telegram_id = 0
         from src.core.nudges import run_nudge_skills
+
         bot = AsyncMock()
         await run_nudge_skills(bot)
         mock_gen.assert_not_called()
@@ -303,7 +330,9 @@ class TestRunNudgeSkills:
     @patch("src.core.nudges.engine.generate", new_callable=AsyncMock)
     @patch("src.core.nudges.engine.settings")
     async def test_sends_nudge_when_skill_fires(
-        self, mock_settings: AsyncMock, mock_gen: AsyncMock,
+        self,
+        mock_settings: AsyncMock,
+        mock_gen: AsyncMock,
     ) -> None:
         mock_settings.owner_telegram_id = 100
         mock_gen.return_value = "Hey there! 🦝"
@@ -312,6 +341,7 @@ class TestRunNudgeSkills:
         register_skill(skill)
 
         from src.core.nudges import run_nudge_skills
+
         bot = AsyncMock()
         await run_nudge_skills(bot)
 
@@ -322,7 +352,9 @@ class TestRunNudgeSkills:
     @patch("src.core.nudges.engine.generate", new_callable=AsyncMock)
     @patch("src.core.nudges.engine.settings")
     async def test_respects_cooldown(
-        self, mock_settings: AsyncMock, mock_gen: AsyncMock,
+        self,
+        mock_settings: AsyncMock,
+        mock_gen: AsyncMock,
     ) -> None:
         mock_settings.owner_telegram_id = 100
         mock_gen.return_value = "Hey!"
@@ -332,6 +364,7 @@ class TestRunNudgeSkills:
         _mark_fired(100, "dummy")
 
         from src.core.nudges import run_nudge_skills
+
         bot = AsyncMock()
         await run_nudge_skills(bot)
 

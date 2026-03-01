@@ -8,7 +8,7 @@ from typing import Any, Sequence
 
 from sqlalchemy import desc, distinct, func, select
 
-from src.core.db.models import Contact, Habit, Message, MoodEntry, Relationship, RelationshipEvent, Summary
+from src.core.db.models import Contact, Habit, Message, Relationship, Summary
 from src.core.db.session import get_session
 
 logger = logging.getLogger(__name__)
@@ -25,6 +25,7 @@ async def save_message(
     chat_id: int,
     from_contact_id: int | None = None,
     text_content: str,
+    is_bot_reply: bool = False,
     timestamp: datetime.datetime | None = None,
 ) -> Message:
     """Persist a new chat message."""
@@ -33,6 +34,7 @@ async def save_message(
         chat_id=chat_id,
         from_contact_id=from_contact_id,
         text=text_content,
+        is_bot_reply=is_bot_reply,
         **({"timestamp": timestamp} if timestamp else {}),
     )
     async with get_session() as session:
@@ -53,6 +55,38 @@ async def get_recent_messages(
         stmt = stmt.where(Message.from_contact_id == from_contact_id)
     stmt = stmt.order_by(desc(Message.timestamp)).limit(limit)
 
+    async with get_session() as session:
+        result = await session.execute(stmt)
+        return list(reversed(result.scalars().all()))
+
+
+async def get_conversation_history(
+    chat_id: int,
+    *,
+    limit: int = 10,
+) -> list[Message]:
+    """Return the most recent owner-side conversation turns for a chat.
+
+    Retrieves the last *limit* messages where ``from_contact_id IS NULL``
+    (i.e. owner messages and bot replies), ordered chronologically
+    (oldest first).
+
+    Args:
+        chat_id: The Telegram chat ID (usually the owner ID).
+        limit: Maximum number of turns to return.
+
+    Returns:
+        List of Message objects in chronological order.
+    """
+    stmt = (
+        select(Message)
+        .where(
+            Message.chat_id == chat_id,
+            Message.from_contact_id.is_(None),
+        )
+        .order_by(desc(Message.timestamp))
+        .limit(limit)
+    )
     async with get_session() as session:
         result = await session.execute(stmt)
         return list(reversed(result.scalars().all()))
@@ -169,9 +203,7 @@ async def get_contact_by_id(
 ) -> Contact | None:
     """Look up a contact by primary key."""
     async with get_session() as session:
-        result = await session.execute(
-            select(Contact).where(Contact.id == contact_id)
-        )
+        result = await session.execute(select(Contact).where(Contact.id == contact_id))
         return result.scalar_one_or_none()
 
 
@@ -407,10 +439,21 @@ async def upsert_relationship(
 # ---------------------------------------------------------------------------
 
 
-async def get_all_habits() -> list[Habit]:
-    """Return all persisted habits."""
+async def get_all_habits(owner_id: int | None = None) -> list[Habit]:
+    """Return persisted habits, optionally filtered by owner.
+
+    Args:
+        owner_id: If provided, return only habits belonging to this owner.
+                  Pass ``None`` to return all habits (admin / testing use).
+
+    Returns:
+        List of matching ``Habit`` rows.
+    """
     async with get_session() as session:
-        result = await session.execute(select(Habit))
+        stmt = select(Habit)
+        if owner_id is not None:
+            stmt = stmt.where(Habit.owner_id == owner_id)
+        result = await session.execute(stmt)
         return list(result.scalars().all())
 
 
@@ -424,9 +467,13 @@ async def count_messages_since(
     since: datetime.datetime,
 ) -> int:
     """Count messages in a chat since a timestamp."""
-    stmt = select(func.count()).select_from(Message).where(
-        Message.chat_id == owner_id,
-        Message.timestamp >= since,
+    stmt = (
+        select(func.count())
+        .select_from(Message)
+        .where(
+            Message.chat_id == owner_id,
+            Message.timestamp >= since,
+        )
     )
     async with get_session() as session:
         result = await session.execute(stmt)
@@ -439,10 +486,14 @@ async def count_messages_from_contact_since(
     since: datetime.datetime,
 ) -> int:
     """Count messages from a specific contact since a timestamp."""
-    stmt = select(func.count()).select_from(Message).where(
-        Message.from_contact_id == contact_id,
-        Message.chat_id == owner_id,
-        Message.timestamp >= since,
+    stmt = (
+        select(func.count())
+        .select_from(Message)
+        .where(
+            Message.from_contact_id == contact_id,
+            Message.chat_id == owner_id,
+            Message.timestamp >= since,
+        )
     )
     async with get_session() as session:
         result = await session.execute(stmt)

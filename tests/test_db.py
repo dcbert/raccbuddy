@@ -11,7 +11,6 @@ from src.core.db import (
     get_all_habits,
     get_all_owner_ids,
     get_contact,
-    get_contact_by_id,
     get_contact_by_name,
     get_contact_name,
     get_contacts_with_messages_since,
@@ -27,6 +26,7 @@ from src.core.db import (
     save_summary,
     upsert_contact,
 )
+from src.core.db.models import NudgeCooldown
 
 
 class TestModels:
@@ -48,8 +48,27 @@ class TestModels:
         assert Contact.__tablename__ == "contacts"
 
     def test_all_models_inherit_base(self) -> None:
-        for model in (Message, Summary, Relationship, Habit, Contact):
+        for model in (Message, Summary, Relationship, Habit, Contact, NudgeCooldown):
             assert issubclass(model, Base)
+
+    def test_nudge_cooldown_tablename(self) -> None:
+        assert NudgeCooldown.__tablename__ == "nudge_cooldowns"
+
+    def test_nudge_cooldown_columns_exist(self) -> None:
+        cols = {c.name for c in NudgeCooldown.__table__.columns}
+        assert {"id", "owner_id", "skill_name", "last_fired_at"}.issubset(cols)
+
+    def test_nudge_cooldown_unique_constraint(self) -> None:
+        constraints = {c.name for c in NudgeCooldown.__table__.constraints}
+        assert "uq_owner_skill_cooldown" in constraints
+
+    def test_nudge_cooldown_owner_id_not_nullable(self) -> None:
+        col = NudgeCooldown.__table__.columns["owner_id"]
+        assert col.nullable is False
+
+    def test_nudge_cooldown_skill_name_not_nullable(self) -> None:
+        col = NudgeCooldown.__table__.columns["skill_name"]
+        assert col.nullable is False
 
     def test_relationship_default_score(self) -> None:
         r = Relationship.__table__.columns["score"]
@@ -105,18 +124,33 @@ class TestCrudExports:
         assert callable(get_session)
 
     def test_message_crud_exports(self) -> None:
-        for fn in (save_message, get_recent_messages, get_messages_since,
-                    get_idle_contact_ids, get_last_message_ts_for_contact):
+        for fn in (
+            save_message,
+            get_recent_messages,
+            get_messages_since,
+            get_idle_contact_ids,
+            get_last_message_ts_for_contact,
+        ):
             assert callable(fn)
 
     def test_contact_crud_exports(self) -> None:
-        for fn in (upsert_contact, get_contact, get_contact_by_name,
-                    get_contact_name, get_all_contacts, get_all_owner_ids):
+        for fn in (
+            upsert_contact,
+            get_contact,
+            get_contact_by_name,
+            get_contact_name,
+            get_all_contacts,
+            get_all_owner_ids,
+        ):
             assert callable(fn)
 
     def test_summary_crud_exports(self) -> None:
-        for fn in (save_summary, get_summary_for_date,
-                    get_relevant_summaries, get_contacts_with_messages_since):
+        for fn in (
+            save_summary,
+            get_summary_for_date,
+            get_relevant_summaries,
+            get_contacts_with_messages_since,
+        ):
             assert callable(fn)
 
     def test_relationship_crud_exports(self) -> None:

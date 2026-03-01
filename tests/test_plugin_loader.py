@@ -11,7 +11,6 @@ import pytest
 from src.core.plugin_loader import (
     clear_plugins,
     get_registered_plugins,
-    load_user_plugins,
     register_all_with_app,
     register_plugin,
     teardown_all_plugins,
@@ -252,8 +251,10 @@ class TestHandleMessage:
 
         # This test just verifies the plugin's handle_message can be called
         # In the real example_echo.py, it calls save_message
-        await plugin.handle_message({
-            "chat_id": 123,
-            "from_id": 456,
-            "text": "hello",
-        })
+        await plugin.handle_message(
+            {
+                "chat_id": 123,
+                "from_id": 456,
+                "text": "hello",
+            }
+        )
