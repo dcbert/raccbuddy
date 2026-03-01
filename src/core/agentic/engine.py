@@ -72,8 +72,10 @@ async def run_agentic_cycle(bot: object) -> None:
         logger.warning("ProactiveEngine: no owner_id configured — skipping")
         return
 
-    # Thread ID for LangGraph checkpointing (one per owner, survives restarts)
-    thread_id = f"owner-{owner_id}"
+    # Unique thread ID per cycle — prevents state accumulation across cycles
+    # (operator.add reducers in AgenticState would otherwise append to previous
+    # cycle's candidates/approved lists, causing duplicate nudge delivery)
+    thread_id = f"owner-{owner_id}-cycle-{cycle_id}"
     config = {"configurable": {"thread_id": thread_id}}
 
     agentic_tracing.trace_cycle(cycle_id, {"owner_id": owner_id})
