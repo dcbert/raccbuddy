@@ -12,8 +12,10 @@ uvicorn[standard]>=0.30.0,<1.0
 openai>=1.0.0,<2.0
 
 # Agentic core (LangGraph)
-langgraph>=0.2.0,<1.0
-langgraph-checkpoint-postgres>=2.0.0,<3.0
+langgraph>=1.0.6,<2.0
+langgraph-checkpoint>=4.0.0,<5.0
+langgraph-checkpoint-postgres>=3.0.0,<4.0
+langgraph-checkpoint-sqlite>=3.0.0,<4.0
 psycopg[binary]>=3.1.0,<4.0
 
 # Agentic optional: tracing & metrics
