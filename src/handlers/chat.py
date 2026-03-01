@@ -132,17 +132,17 @@ async def chat_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
         system = _build_system_prompt()
 
+        # Always use proper multi-turn messages for conversation coherence
+        messages = await context_builder.build_messages(
+            owner,
+            contact_id,
+            text,
+            system,
+        )
+
         if provider_supports_tools():
-            ctx = await context_builder.build(owner, contact_id, text)
-            reply = await _generate_with_tool_loop(ctx, text, owner)
+            reply = await _generate_with_tool_loop(messages, owner)
         else:
-            # Use proper multi-turn messages for conversation coherence
-            messages = await context_builder.build_messages(
-                owner,
-                contact_id,
-                text,
-                system,
-            )
             reply = await generate_chat(messages)
 
         # Run chat-skill post-processors
@@ -447,29 +447,19 @@ async def contacts_handler(
 
 
 async def _generate_with_tool_loop(
-    context_str: str,
-    user_message: str,
+    messages: list[dict],
     owner_id: int,
 ) -> str:
-    """Run a generate → tool-call → feed-result loop until the model
+    """Run a generate -> tool-call -> feed-result loop until the model
     produces a final text answer or the round limit is hit.
 
     Args:
-        context_str: Pre-built context from memory module.
-        user_message: The raw user message.
+        messages: Pre-built multi-turn messages list from context_builder.build_messages().
         owner_id: Telegram owner ID for tool execution.
 
     Returns:
-        The final text reply from the model.
+        The final text reply from the model (tool diagnostics are logged, not returned).
     """
-    messages: list[dict] = [
-        {"role": "system", "content": _build_system_prompt()},
-        {
-            "role": "user",
-            "content": f"{context_str}\n\n{user_message}",
-        },
-    ]
-
     all_tools = get_all_tool_schemas()
 
     for _round in range(settings.max_tool_rounds):
@@ -480,6 +470,10 @@ async def _generate_with_tool_loop(
 
         if not result.tool_calls:
             return result.text or "🦝"
+
+        # Log intermediate text (tool reasoning/diagnostics) — don't send to user
+        if result.text:
+            logger.info("Tool-loop round %d reasoning: %s", _round, result.text[:500])
 
         # Append the assistant message with tool calls
         assistant_msg: dict = {"role": "assistant", "content": result.text or ""}
