@@ -15,8 +15,7 @@ class WeekendCheckinSkill(BaseNudgeSkill):
     name = "weekend_checkin"  # type: ignore[assignment]
     trigger = "weekend"  # type: ignore[assignment]
     default_prompt = (  # type: ignore[assignment]
-        "It's the weekend! Send a relaxed, fun raccoon check-in. "
-        "Max 2 sentences."
+        "It's the weekend! Send a relaxed, fun raccoon check-in. " "Max 2 sentences."
     )
 
     @property

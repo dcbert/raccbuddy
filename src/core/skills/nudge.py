@@ -101,13 +101,16 @@ class ContactQuietSkill(BaseNudgeSkill):
 
         for contact in contacts:
             last_ts = await get_last_message_ts_for_contact(
-                contact.id, owner_id,
+                contact.id,
+                owner_id,
             )
             if last_ts is None or last_ts >= quiet_cutoff:
                 continue
 
             prior_msgs = await count_messages_from_contact_since(
-                contact.id, owner_id, active_cutoff,
+                contact.id,
+                owner_id,
+                active_cutoff,
             )
             if prior_msgs > 0:
                 quiet_contacts.append(contact.contact_name)

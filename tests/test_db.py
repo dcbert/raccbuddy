@@ -11,7 +11,6 @@ from src.core.db import (
     get_all_habits,
     get_all_owner_ids,
     get_contact,
-    get_contact_by_id,
     get_contact_by_name,
     get_contact_name,
     get_contacts_with_messages_since,
@@ -125,18 +124,33 @@ class TestCrudExports:
         assert callable(get_session)
 
     def test_message_crud_exports(self) -> None:
-        for fn in (save_message, get_recent_messages, get_messages_since,
-                    get_idle_contact_ids, get_last_message_ts_for_contact):
+        for fn in (
+            save_message,
+            get_recent_messages,
+            get_messages_since,
+            get_idle_contact_ids,
+            get_last_message_ts_for_contact,
+        ):
             assert callable(fn)
 
     def test_contact_crud_exports(self) -> None:
-        for fn in (upsert_contact, get_contact, get_contact_by_name,
-                    get_contact_name, get_all_contacts, get_all_owner_ids):
+        for fn in (
+            upsert_contact,
+            get_contact,
+            get_contact_by_name,
+            get_contact_name,
+            get_all_contacts,
+            get_all_owner_ids,
+        ):
             assert callable(fn)
 
     def test_summary_crud_exports(self) -> None:
-        for fn in (save_summary, get_summary_for_date,
-                    get_relevant_summaries, get_contacts_with_messages_since):
+        for fn in (
+            save_summary,
+            get_summary_for_date,
+            get_relevant_summaries,
+            get_contacts_with_messages_since,
+        ):
             assert callable(fn)
 
     def test_relationship_crud_exports(self) -> None:

@@ -10,7 +10,6 @@ from fastapi.testclient import TestClient
 
 from src.api import _verify_api_key, api
 
-
 # ---------------------------------------------------------------------------
 # _verify_api_key helper
 # ---------------------------------------------------------------------------

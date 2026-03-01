@@ -37,7 +37,6 @@ from typing import Optional
 from src.core.config import settings
 from src.core.db.crud import (
     get_all_contacts_all_platforms,
-    get_contact_name,
     get_conversation_history,
     get_recent_messages,
     get_recent_messages_for_contact,
@@ -107,7 +106,10 @@ class ContextBuilder:
         # -- Layer 4: Semantic memories ------------------------------------
         if contact_id is not None:
             sem_block = await self._semantic_memories(
-                query, owner_id, contact_id, budget_chars,
+                query,
+                owner_id,
+                contact_id,
+                budget_chars,
             )
             if sem_block:
                 parts.append(sem_block)
@@ -132,12 +134,16 @@ class ContextBuilder:
             context = context[:budget_chars]
             logger.warning(
                 "Context truncated to %d chars (max_tokens=%d, contact_id=%s)",
-                budget_chars, effective_max, contact_id,
+                budget_chars,
+                effective_max,
+                contact_id,
             )
         else:
             logger.debug(
                 "Context built: %d chars / %d budget (contact_id=%s)",
-                len(context), budget_chars, contact_id,
+                len(context),
+                budget_chars,
+                contact_id,
             )
 
         return context
@@ -195,7 +201,10 @@ class ContextBuilder:
 
         if contact_id is not None:
             sem_block = await self._semantic_memories(
-                query, owner_id, contact_id, budget_chars,
+                query,
+                owner_id,
+                contact_id,
+                budget_chars,
             )
             if sem_block:
                 context_parts.append(sem_block)
@@ -240,7 +249,9 @@ class ContextBuilder:
 
         logger.debug(
             "build_messages: %d messages, ~%d chars (contact_id=%s)",
-            len(messages), used_chars, contact_id,
+            len(messages),
+            used_chars,
+            contact_id,
         )
         return messages
 
@@ -287,11 +298,17 @@ class ContextBuilder:
                 rows = (await session.execute(stmt)).all()
 
         except Exception:
-            logger.warning("Owner facts vector search failed; falling back to importance order")
+            logger.warning(
+                "Owner facts vector search failed; falling back to importance order"
+            )
             try:
                 async with get_session() as session:
                     stmt = (
-                        select(OwnerMemory.content, OwnerMemory.category, OwnerMemory.importance)
+                        select(
+                            OwnerMemory.content,
+                            OwnerMemory.category,
+                            OwnerMemory.importance,
+                        )
                         .where(OwnerMemory.owner_id == owner_id)
                         .order_by(
                             desc(OwnerMemory.importance),
@@ -307,7 +324,9 @@ class ContextBuilder:
         if not rows:
             return ""
 
-        header = "[Background knowledge about you — use only if relevant to the question]"
+        header = (
+            "[Background knowledge about you — use only if relevant to the question]"
+        )
         lines = [header]
         used = len(header)
         for row in rows:
@@ -406,7 +425,9 @@ class ContextBuilder:
                 limit=settings.memory_max_summaries,
             )
         except Exception:
-            logger.warning("Summary retrieval failed for contact %d", contact_id, exc_info=True)
+            logger.warning(
+                "Summary retrieval failed for contact %d", contact_id, exc_info=True
+            )
             return ""
 
         if not summaries:
@@ -426,7 +447,9 @@ class ContextBuilder:
         limit = settings.memory_recent_messages
         try:
             if contact_id is not None:
-                messages = await get_recent_messages_for_contact(contact_id, limit=limit)
+                messages = await get_recent_messages_for_contact(
+                    contact_id, limit=limit
+                )
             else:
                 messages = await get_recent_messages(owner_id, limit=limit)
         except Exception:

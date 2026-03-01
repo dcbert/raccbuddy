@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from xai_sdk import AsyncClient
 from xai_sdk.chat import assistant
@@ -52,11 +52,15 @@ class XAIProvider(BaseLLMProvider):
         self.enable_builtin = settings.xai_enable_builtin_tools
 
         if self.enable_builtin:
-            logger.warning("🟡 Grok Built-in Agent Tools ENABLED (web/X/code search) — data leaves machine")
+            logger.warning(
+                "🟡 Grok Built-in Agent Tools ENABLED (web/X/code search) — data leaves machine"
+            )
         else:
             logger.info("✅ XAIProvider ready (built-in tools OFF — 100% privacy)")
 
-        logger.info("   model=%s | temperature=%s", self.model, settings.xai_temperature)
+        logger.info(
+            "   model=%s | temperature=%s", self.model, settings.xai_temperature
+        )
 
     def _build_xai_tools(self, custom_tools: List[Dict[str, Any]]) -> List:
         """Mix optional built-in + always-present custom tools."""
@@ -70,7 +74,9 @@ class XAIProvider(BaseLLMProvider):
                     tool(
                         name=fn["name"],
                         description=fn.get("description", ""),
-                        parameters=fn.get("parameters", {"type": "object", "properties": {}}),
+                        parameters=fn.get(
+                            "parameters", {"type": "object", "properties": {}}
+                        ),
                     )
                 )
         return tools
@@ -168,7 +174,11 @@ class XAIProvider(BaseLLMProvider):
             if response.tool_calls:
                 for tc in response.tool_calls:
                     try:
-                        args = json.loads(tc.function.arguments) if tc.function.arguments else {}
+                        args = (
+                            json.loads(tc.function.arguments)
+                            if tc.function.arguments
+                            else {}
+                        )
                     except Exception:
                         args = {}
                     tool_calls.append(
@@ -186,9 +196,13 @@ class XAIProvider(BaseLLMProvider):
             )
 
         except Exception:
-            logger.error("xAI generate_with_tools failed (model=%s)", self.model, exc_info=True)
+            logger.error(
+                "xAI generate_with_tools failed (model=%s)", self.model, exc_info=True
+            )
             raise
 
     async def embed(self, text: str) -> List[float]:
         """Embeddings (placeholder — use ollama or OpenAI compat if needed)."""
-        raise NotImplementedError("xAI embeddings via SDK coming soon or use another provider")
+        raise NotImplementedError(
+            "xAI embeddings via SDK coming soon or use another provider"
+        )

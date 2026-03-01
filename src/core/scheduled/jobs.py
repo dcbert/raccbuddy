@@ -37,7 +37,9 @@ async def schedule_llm_job(
     from src.core.db.session import get_session
 
     job_id = uuid.uuid4().hex[:8]
-    fire_at = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(minutes=delay_minutes)
+    fire_at = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(
+        minutes=delay_minutes
+    )
 
     job = ScheduledJobModel(
         job_id=job_id,
@@ -57,7 +59,10 @@ async def schedule_llm_job(
 
     logger.info(
         "LLM scheduled job %s: '%s' in %dm (reason: %s)",
-        job_id, message[:50], delay_minutes, reason or "none",
+        job_id,
+        message[:50],
+        delay_minutes,
+        reason or "none",
     )
 
     _register_with_job_queue(job_id, delay_minutes)
@@ -90,7 +95,8 @@ async def restore_pending_jobs() -> int:
                 restored += 1
                 logger.info(
                     "Restored pending job %s (fires in %.1f min)",
-                    job.job_id, remaining_minutes,
+                    job.job_id,
+                    remaining_minutes,
                 )
     except Exception:
         logger.exception("Failed to restore pending scheduled jobs")

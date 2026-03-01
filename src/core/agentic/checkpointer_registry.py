@@ -153,7 +153,9 @@ class PostgresCheckpointer(BaseCheckpointer):
                 # If we entered a context manager, exit it to allow the
                 # saver to clean up resources. Otherwise, attempt to close
                 # the underlying connection if available.
-                if self._saver_ctx is not None and hasattr(self._saver_ctx, "__aexit__"):
+                if self._saver_ctx is not None and hasattr(
+                    self._saver_ctx, "__aexit__"
+                ):
                     await self._saver_ctx.__aexit__(None, None, None)
                 elif hasattr(self._saver, "conn"):
                     await self._saver.conn.close()

@@ -4,9 +4,20 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.core.llm import SYSTEM_PROMPT, embed, generate, generate_chat, generate_with_tools, provider_supports_tools
-from src.core.llm.base import BaseLLMProvider, GenerationResult, ToolCall
-from src.core.llm.providers import PROVIDER_REGISTRY, get_provider, register_provider, reset_provider
+from src.core.llm import (
+    embed,
+    generate,
+    generate_chat,
+    generate_with_tools,
+    provider_supports_tools,
+)
+from src.core.llm.base import BaseLLMProvider, GenerationResult
+from src.core.llm.providers import (
+    PROVIDER_REGISTRY,
+    get_provider,
+    register_provider,
+    reset_provider,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -50,6 +61,7 @@ def _make_xai_mock(response_data: dict) -> MagicMock:
 
     # chat.handle where chat.create(...) returns an object with sample coroutine
     chat_obj = MagicMock()
+
     async def _sample():
         return response
 
@@ -180,7 +192,9 @@ class TestXAIProvider:
     @patch("src.core.llm.providers.xai.settings")
     @patch("src.core.llm.providers.xai.AsyncClient")
     async def test_xai_generate(
-        self, mock_client_cls: MagicMock, mock_settings: MagicMock,
+        self,
+        mock_client_cls: MagicMock,
+        mock_settings: MagicMock,
     ) -> None:
         mock_settings.xai_api_key = "test-key"
         mock_settings.xai_model = "grok-4-1-fast-reasoning"
@@ -196,7 +210,8 @@ class TestXAIProvider:
 
     @patch("src.core.llm.providers.xai.settings")
     async def test_xai_generate_no_key_raises(
-        self, mock_settings: MagicMock,
+        self,
+        mock_settings: MagicMock,
     ) -> None:
         mock_settings.xai_api_key = ""
 
@@ -208,7 +223,8 @@ class TestXAIProvider:
 
     @patch("src.core.llm.providers.xai.AsyncClient")
     async def test_xai_embed_uses_xai_api(
-        self, mock_client_cls: MagicMock,
+        self,
+        mock_client_cls: MagicMock,
     ) -> None:
         from src.core.llm.providers.xai import XAIProvider
 
@@ -244,7 +260,8 @@ class TestGenerateWithTools:
 
     @patch("src.core.llm.providers.ollama.httpx.AsyncClient")
     async def test_fallback_for_non_tool_provider(
-        self, mock_client_cls: MagicMock,
+        self,
+        mock_client_cls: MagicMock,
     ) -> None:
         """Ollama provider should fall back to plain generate."""
         mock_client = _make_httpx_mock({"response": "plain answer"})
@@ -268,7 +285,9 @@ class TestXAIToolCalling:
     @patch("src.core.llm.providers.xai.settings")
     @patch("src.core.llm.providers.xai.AsyncClient")
     async def test_xai_returns_tool_calls(
-        self, mock_client_cls: MagicMock, mock_settings: MagicMock,
+        self,
+        mock_client_cls: MagicMock,
+        mock_settings: MagicMock,
     ) -> None:
         mock_settings.xai_api_key = "test-key"
         mock_settings.xai_model = "grok-4-1-fast-reasoning"
@@ -297,7 +316,9 @@ class TestXAIToolCalling:
     @patch("src.core.llm.providers.xai.settings")
     @patch("src.core.llm.providers.xai.AsyncClient")
     async def test_xai_returns_text_when_no_tools(
-        self, mock_client_cls: MagicMock, mock_settings: MagicMock,
+        self,
+        mock_client_cls: MagicMock,
+        mock_settings: MagicMock,
     ) -> None:
         mock_settings.xai_api_key = "test-key"
         mock_settings.xai_model = "grok-4-1-fast-reasoning"
@@ -372,7 +393,9 @@ class TestOllamaGenerateChat:
         assert payload["stream"] is False
 
     @patch("src.core.llm.providers.ollama.httpx.AsyncClient")
-    async def test_empty_message_returns_empty(self, mock_client_cls: MagicMock) -> None:
+    async def test_empty_message_returns_empty(
+        self, mock_client_cls: MagicMock
+    ) -> None:
         mock_client = _make_httpx_mock({"message": {}})
         mock_client_cls.return_value = mock_client
 
@@ -390,7 +413,9 @@ class TestXAIGenerateChat:
     @patch("src.core.llm.providers.xai.settings")
     @patch("src.core.llm.providers.xai.AsyncClient")
     async def test_sends_messages_array(
-        self, mock_client_cls: MagicMock, mock_settings: MagicMock,
+        self,
+        mock_client_cls: MagicMock,
+        mock_settings: MagicMock,
     ) -> None:
         mock_settings.xai_api_key = "test-key"
         mock_settings.xai_model = "grok-4-1-fast-reasoning"
@@ -418,7 +443,9 @@ class TestXAIGenerateChat:
     @patch("src.core.llm.providers.xai.settings")
     @patch("src.core.llm.providers.xai.AsyncClient")
     async def test_empty_choices_returns_empty(
-        self, mock_client_cls: MagicMock, mock_settings: MagicMock,
+        self,
+        mock_client_cls: MagicMock,
+        mock_settings: MagicMock,
     ) -> None:
         mock_settings.xai_api_key = "test-key"
         mock_settings.xai_model = "grok-4-1-fast-reasoning"

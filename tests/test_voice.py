@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import os
 import struct
 import tempfile
@@ -11,7 +10,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.core.voice.base import BaseSTTProvider, BaseTTSProvider, SynthesisResult, TranscriptionResult
+from src.core.voice.base import (
+    BaseSTTProvider,
+    BaseTTSProvider,
+    SynthesisResult,
+    TranscriptionResult,
+)
 from src.core.voice.manager import VoiceManager
 from src.core.voice.providers import get_stt_provider, get_tts_provider
 
@@ -20,7 +24,9 @@ from src.core.voice.providers import get_stt_provider, get_tts_provider
 # ===================================================================
 
 
-def _make_wav_file(path: Path, duration_seconds: float = 0.5, sample_rate: int = 16000) -> None:
+def _make_wav_file(
+    path: Path, duration_seconds: float = 0.5, sample_rate: int = 16000
+) -> None:
     """Write a minimal valid WAV file (silence) for testing."""
     num_samples = int(sample_rate * duration_seconds)
     data_size = num_samples * 2  # 16-bit mono
@@ -32,11 +38,11 @@ def _make_wav_file(path: Path, duration_seconds: float = 0.5, sample_rate: int =
         # fmt chunk
         f.write(b"fmt ")
         f.write(struct.pack("<I", 16))  # chunk size
-        f.write(struct.pack("<H", 1))   # PCM format
-        f.write(struct.pack("<H", 1))   # mono
+        f.write(struct.pack("<H", 1))  # PCM format
+        f.write(struct.pack("<H", 1))  # mono
         f.write(struct.pack("<I", sample_rate))
         f.write(struct.pack("<I", sample_rate * 2))  # byte rate
-        f.write(struct.pack("<H", 2))   # block align
+        f.write(struct.pack("<H", 2))  # block align
         f.write(struct.pack("<H", 16))  # bits per sample
         # data chunk
         f.write(b"data")
@@ -56,7 +62,10 @@ class StubSTTProvider(BaseSTTProvider):
         return "stub/stt-model"
 
     async def transcribe(
-        self, audio_path: Path, *, language: str | None = None,
+        self,
+        audio_path: Path,
+        *,
+        language: str | None = None,
     ) -> TranscriptionResult:
         return TranscriptionResult(
             text="Hello from stub",
@@ -262,13 +271,17 @@ class TestVoiceManagerDisabled:
         assert mgr.is_enabled is False
 
     @pytest.mark.asyncio
-    async def test_transcribe_raises_when_disabled(self, _voice_disabled: MagicMock) -> None:
+    async def test_transcribe_raises_when_disabled(
+        self, _voice_disabled: MagicMock
+    ) -> None:
         mgr = VoiceManager()
         with pytest.raises(RuntimeError, match="Voice processing is disabled"):
             await mgr.transcribe(Path("/fake.wav"))
 
     @pytest.mark.asyncio
-    async def test_synthesize_raises_when_disabled(self, _voice_disabled: MagicMock) -> None:
+    async def test_synthesize_raises_when_disabled(
+        self, _voice_disabled: MagicMock
+    ) -> None:
         mgr = VoiceManager()
         with pytest.raises(RuntimeError, match="Voice processing is disabled"):
             await mgr.synthesize("Hello")
@@ -295,7 +308,9 @@ class TestVoiceManagerEnabled:
             wav_path.unlink(missing_ok=True)
 
     @pytest.mark.asyncio
-    async def test_synthesize_delegates_to_tts_wav(self, _voice_enabled: MagicMock) -> None:
+    async def test_synthesize_delegates_to_tts_wav(
+        self, _voice_enabled: MagicMock
+    ) -> None:
         mgr = VoiceManager()
         stub = StubTTSProvider()
         mgr._tts = stub
@@ -340,7 +355,9 @@ class TestVoiceManagerEnabled:
         assert mgr._tts is None
 
     @pytest.mark.asyncio
-    async def test_warmup_skipped_when_disabled(self, _voice_disabled: MagicMock) -> None:
+    async def test_warmup_skipped_when_disabled(
+        self, _voice_disabled: MagicMock
+    ) -> None:
         mgr = VoiceManager()
         # Should not raise
         await mgr.warmup()
@@ -578,7 +595,8 @@ class TestBarkTTSProvider:
         # Simulate generate returning a tensor-like object
         fake_audio = MagicMock()
         fake_audio.cpu.return_value.numpy.return_value.squeeze.return_value = np.zeros(
-            24_000, dtype=np.float32,  # 1 second of silence
+            24_000,
+            dtype=np.float32,  # 1 second of silence
         )
         mock_model.generate.return_value = fake_audio
         mock_model.parameters.return_value = iter(
@@ -590,17 +608,24 @@ class TestBarkTTSProvider:
 
         # Mock scipy since it may not be installed in test env
         mock_wavfile = MagicMock()
-        mock_wavfile.write = MagicMock(side_effect=lambda path, sr, data: Path(path).write_bytes(b"RIFF" + b"\x00" * 100))
+        mock_wavfile.write = MagicMock(
+            side_effect=lambda path, sr, data: Path(path).write_bytes(
+                b"RIFF" + b"\x00" * 100
+            )
+        )
         mock_scipy_io = MagicMock(wavfile=mock_wavfile)
 
         with patch(
             "src.core.voice.providers.bark_tts._check_dependencies",
             return_value=True,
-        ), patch.dict("sys.modules", {
-            "scipy": MagicMock(io=mock_scipy_io),
-            "scipy.io": mock_scipy_io,
-            "scipy.io.wavfile": mock_wavfile,
-        }):
+        ), patch.dict(
+            "sys.modules",
+            {
+                "scipy": MagicMock(io=mock_scipy_io),
+                "scipy.io": mock_scipy_io,
+                "scipy.io.wavfile": mock_wavfile,
+            },
+        ):
             result = await p.synthesize("Hello")
             assert result.audio_path.exists()
             assert result.format == "wav"
@@ -622,7 +647,8 @@ class TestBarkTTSProvider:
         mock_model = MagicMock()
         fake_audio = MagicMock()
         fake_audio.cpu.return_value.numpy.return_value.squeeze.return_value = np.zeros(
-            12_000, dtype=np.float32,
+            12_000,
+            dtype=np.float32,
         )
         mock_model.generate.return_value = fake_audio
         mock_model.parameters.return_value = iter(
@@ -633,7 +659,11 @@ class TestBarkTTSProvider:
         p._model = mock_model
 
         mock_wavfile = MagicMock()
-        mock_wavfile.write = MagicMock(side_effect=lambda path, sr, data: Path(path).write_bytes(b"RIFF" + b"\x00" * 100))
+        mock_wavfile.write = MagicMock(
+            side_effect=lambda path, sr, data: Path(path).write_bytes(
+                b"RIFF" + b"\x00" * 100
+            )
+        )
         mock_scipy_io = MagicMock(wavfile=mock_wavfile)
 
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
@@ -643,11 +673,14 @@ class TestBarkTTSProvider:
             with patch(
                 "src.core.voice.providers.bark_tts._check_dependencies",
                 return_value=True,
-            ), patch.dict("sys.modules", {
-                "scipy": MagicMock(io=mock_scipy_io),
-                "scipy.io": mock_scipy_io,
-                "scipy.io.wavfile": mock_wavfile,
-            }):
+            ), patch.dict(
+                "sys.modules",
+                {
+                    "scipy": MagicMock(io=mock_scipy_io),
+                    "scipy.io": mock_scipy_io,
+                    "scipy.io.wavfile": mock_wavfile,
+                },
+            ):
                 result = await p.synthesize("Hi", output_path=out_path)
                 assert result.audio_path == out_path
                 assert result.audio_path.exists()
@@ -668,7 +701,8 @@ class TestBarkTTSProvider:
         mock_model = MagicMock()
         fake_audio = MagicMock()
         fake_audio.cpu.return_value.numpy.return_value.squeeze.return_value = np.zeros(
-            24_000, dtype=np.float32,
+            24_000,
+            dtype=np.float32,
         )
         mock_model.generate.return_value = fake_audio
         mock_model.parameters.return_value = iter(
@@ -679,21 +713,29 @@ class TestBarkTTSProvider:
         p._model = mock_model
 
         mock_wavfile = MagicMock()
-        mock_wavfile.write = MagicMock(side_effect=lambda path, sr, data: Path(path).write_bytes(b"RIFF" + b"\x00" * 100))
+        mock_wavfile.write = MagicMock(
+            side_effect=lambda path, sr, data: Path(path).write_bytes(
+                b"RIFF" + b"\x00" * 100
+            )
+        )
         mock_scipy_io = MagicMock(wavfile=mock_wavfile)
 
         with patch(
             "src.core.voice.providers.bark_tts._check_dependencies",
             return_value=True,
-        ), patch.dict("sys.modules", {
-            "scipy": MagicMock(io=mock_scipy_io),
-            "scipy.io": mock_scipy_io,
-            "scipy.io.wavfile": mock_wavfile,
-        }):
+        ), patch.dict(
+            "sys.modules",
+            {
+                "scipy": MagicMock(io=mock_scipy_io),
+                "scipy.io": mock_scipy_io,
+                "scipy.io.wavfile": mock_wavfile,
+            },
+        ):
             result = await p.synthesize("Hello", voice_preset="v2/de_speaker_3")
             # Verify the custom preset was passed to the processor
             mock_processor.assert_called_once_with(
-                "Hello", voice_preset="v2/de_speaker_3",
+                "Hello",
+                voice_preset="v2/de_speaker_3",
             )
             result.audio_path.unlink(missing_ok=True)
 
@@ -766,7 +808,9 @@ class TestVoiceHandler:
     @_AUTH_PATCH
     @_OWNER_PATCH
     async def test_voice_disabled_returns_message(
-        self, mock_owner: MagicMock, mock_auth: AsyncMock,
+        self,
+        mock_owner: MagicMock,
+        mock_auth: AsyncMock,
     ) -> None:
         from src.handlers.voice import voice_handler
 
@@ -789,7 +833,9 @@ class TestVoiceHandler:
     @_AUTH_PATCH
     @_OWNER_PATCH
     async def test_voice_no_attachment_returns(
-        self, mock_owner: MagicMock, mock_auth: AsyncMock,
+        self,
+        mock_owner: MagicMock,
+        mock_auth: AsyncMock,
     ) -> None:
         from src.handlers.voice import voice_handler
 
@@ -832,12 +878,15 @@ class TestVoiceHandler:
         ]
         mock_generate.return_value = "Hey! Nice to hear from you 🦝"
 
-        with patch("src.handlers.voice.voice_manager") as mock_vm, \
-             patch("src.handlers.voice.settings") as mock_settings:
+        with patch("src.handlers.voice.voice_manager") as mock_vm, patch(
+            "src.handlers.voice.settings"
+        ) as mock_settings:
             mock_vm.is_enabled = True
             mock_vm.transcribe = AsyncMock(
                 return_value=TranscriptionResult(
-                    text="Hello there", language="en", confidence=0.95,
+                    text="Hello there",
+                    language="en",
+                    confidence=0.95,
                 ),
             )
             mock_settings.voice_enabled = True
@@ -880,15 +929,20 @@ class TestVoiceHandler:
     @_AUTH_PATCH
     @_OWNER_PATCH
     async def test_empty_transcription_returns_message(
-        self, mock_owner: MagicMock, mock_auth: AsyncMock,
+        self,
+        mock_owner: MagicMock,
+        mock_auth: AsyncMock,
     ) -> None:
         from src.handlers.voice import voice_handler
 
-        with patch("src.handlers.voice.voice_manager") as mock_vm, \
-             patch("src.handlers.voice.settings") as mock_settings:
+        with patch("src.handlers.voice.voice_manager") as mock_vm, patch(
+            "src.handlers.voice.settings"
+        ) as mock_settings:
             mock_vm.is_enabled = True
             mock_vm.transcribe = AsyncMock(
-                return_value=TranscriptionResult(text="  ", language="", confidence=0.0),
+                return_value=TranscriptionResult(
+                    text="  ", language="", confidence=0.0
+                ),
             )
             mock_settings.voice_enabled = True
             mock_settings.voice_language = ""
@@ -930,7 +984,12 @@ class TestVoiceModuleImports:
         assert callable(synthesize)
 
     def test_import_base_classes(self) -> None:
-        from src.core.voice.base import BaseSTTProvider, BaseTTSProvider, SynthesisResult, TranscriptionResult
+        from src.core.voice.base import (
+            BaseSTTProvider,
+            BaseTTSProvider,
+            SynthesisResult,
+            TranscriptionResult,
+        )
 
         assert BaseSTTProvider is not None
         assert BaseTTSProvider is not None

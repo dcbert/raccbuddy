@@ -8,15 +8,23 @@ from __future__ import annotations
 
 import logging
 
-from src.core.config import settings
-
 logger = logging.getLogger(__name__)
 
 # Allowed mood labels
-_MOODS = frozenset({
-    "happy", "sad", "angry", "anxious", "excited",
-    "neutral", "frustrated", "grateful", "lonely", "loving",
-})
+_MOODS = frozenset(
+    {
+        "happy",
+        "sad",
+        "angry",
+        "anxious",
+        "excited",
+        "neutral",
+        "frustrated",
+        "grateful",
+        "lonely",
+        "loving",
+    }
+)
 
 # Valence lookup (fallback when the model doesn't return a number)
 _VALENCE_MAP: dict[str, float] = {
@@ -60,7 +68,9 @@ class MoodAnalyzer:
             )
             return self._parse_response(raw)
         except Exception:
-            logger.warning("Mood detection failed, defaulting to neutral", exc_info=True)
+            logger.warning(
+                "Mood detection failed, defaulting to neutral", exc_info=True
+            )
             return "neutral", 0.0
 
     async def detect_and_store(

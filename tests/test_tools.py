@@ -40,8 +40,7 @@ class TestToolSchemas:
 
     def test_schedule_message_has_required_params(self) -> None:
         schema = next(
-            s for s in TOOL_SCHEMAS
-            if s["function"]["name"] == "schedule_message"
+            s for s in TOOL_SCHEMAS if s["function"]["name"] == "schedule_message"
         )
         params = schema["function"]["parameters"]
         assert "message" in params["properties"]
@@ -78,7 +77,8 @@ class TestExecuteTool:
 
     @patch("src.core.db.crud.get_all_contacts_all_platforms")
     async def test_list_contacts_empty(
-        self, mock_get_contacts: AsyncMock,
+        self,
+        mock_get_contacts: AsyncMock,
     ) -> None:
         mock_get_contacts.return_value = []
         result = await execute_tool("list_contacts", {}, owner_id=123)
@@ -86,7 +86,8 @@ class TestExecuteTool:
 
     @patch("src.core.db.crud.get_all_contacts_all_platforms")
     async def test_list_contacts_with_data(
-        self, mock_get_contacts: AsyncMock,
+        self,
+        mock_get_contacts: AsyncMock,
     ) -> None:
         contact = MagicMock()
         contact.contact_name = "Giulia"
@@ -122,7 +123,8 @@ class TestExecuteTool:
 
     @patch("src.core.db.crud.get_contact_by_name_any_platform")
     async def test_analyze_contact_not_found(
-        self, mock_get_contact: AsyncMock,
+        self,
+        mock_get_contact: AsyncMock,
     ) -> None:
         mock_get_contact.return_value = None
         result = await execute_tool(
@@ -134,7 +136,8 @@ class TestExecuteTool:
 
     @patch("src.core.scheduled.jobs.schedule_llm_job")
     async def test_schedule_message(
-        self, mock_schedule: AsyncMock,
+        self,
+        mock_schedule: AsyncMock,
     ) -> None:
         mock_schedule.return_value = "abc123"
         result = await execute_tool(

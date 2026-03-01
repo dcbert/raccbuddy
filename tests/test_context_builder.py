@@ -8,6 +8,7 @@ name.
 
 from __future__ import annotations
 
+import sys
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -57,23 +58,58 @@ class TestBuild:
         from contextlib import ExitStack
 
         stack = ExitStack()
-        stack.enter_context(patch.object(cb, "_owner_facts", new_callable=AsyncMock, return_value=owner_facts))
-        stack.enter_context(patch.object(cb, "_state_snapshot", return_value=state_snapshot or ["[User state: mood=neutral, msgs_today=0, streak=0d]"]))
-        stack.enter_context(patch.object(cb, "_contacts_roster", new_callable=AsyncMock, return_value=contacts_roster))
-        stack.enter_context(patch.object(cb, "_semantic_memories", new_callable=AsyncMock, return_value=semantic_memories))
-        stack.enter_context(patch.object(cb, "_summaries", new_callable=AsyncMock, return_value=summaries))
-        stack.enter_context(patch.object(cb, "_episodic", new_callable=AsyncMock, return_value=episodic))
+        stack.enter_context(
+            patch.object(
+                cb, "_owner_facts", new_callable=AsyncMock, return_value=owner_facts
+            )
+        )
+        stack.enter_context(
+            patch.object(
+                cb,
+                "_state_snapshot",
+                return_value=state_snapshot
+                or ["[User state: mood=neutral, msgs_today=0, streak=0d]"],
+            )
+        )
+        stack.enter_context(
+            patch.object(
+                cb,
+                "_contacts_roster",
+                new_callable=AsyncMock,
+                return_value=contacts_roster,
+            )
+        )
+        stack.enter_context(
+            patch.object(
+                cb,
+                "_semantic_memories",
+                new_callable=AsyncMock,
+                return_value=semantic_memories,
+            )
+        )
+        stack.enter_context(
+            patch.object(
+                cb, "_summaries", new_callable=AsyncMock, return_value=summaries
+            )
+        )
+        stack.enter_context(
+            patch.object(cb, "_episodic", new_callable=AsyncMock, return_value=episodic)
+        )
         return stack
 
     async def test_always_includes_current_query(self) -> None:
         cb = ContextBuilder()
         with self._patch_all_layers(cb):
-            result = await cb.build(owner_id=100, contact_id=None, query="hello raccoon")
+            result = await cb.build(
+                owner_id=100, contact_id=None, query="hello raccoon"
+            )
         assert "[Current message]: hello raccoon" in result
 
     async def test_includes_user_state_snapshot(self) -> None:
         cb = ContextBuilder()
-        with self._patch_all_layers(cb, state_snapshot=["[User state: mood=happy, msgs_today=5, streak=3d]"]):
+        with self._patch_all_layers(
+            cb, state_snapshot=["[User state: mood=happy, msgs_today=5, streak=3d]"]
+        ):
             result = await cb.build(owner_id=100, contact_id=None, query="hi")
         assert "[User state:" in result
         assert "mood=happy" in result
@@ -110,16 +146,18 @@ class TestBuild:
 
     async def test_skips_contact_layers_when_contact_id_none(self) -> None:
         cb = ContextBuilder()
-        with self._patch_all_layers(cb) as stack:
-            result = await cb.build(owner_id=100, contact_id=None, query="hi")
+        with self._patch_all_layers(cb):
+            _ = await cb.build(owner_id=100, contact_id=None, query="hi")
             # _semantic_memories and _summaries should NOT be called when contact_id=None
             cb._semantic_memories.assert_not_called()
             cb._summaries.assert_not_called()
 
     async def test_calls_contact_layers_when_contact_provided(self) -> None:
         cb = ContextBuilder()
-        with self._patch_all_layers(cb, semantic_memories="[Relevant memories]\n- fact"):
-            result = await cb.build(owner_id=100, contact_id=42, query="hi")
+        with self._patch_all_layers(
+            cb, semantic_memories="[Relevant memories]\n- fact"
+        ):
+            _ = await cb.build(owner_id=100, contact_id=42, query="hi")
             cb._semantic_memories.assert_called_once()
             cb._summaries.assert_called_once()
 
@@ -130,7 +168,10 @@ class TestBuild:
         giant = "x" * 10_000
         with self._patch_all_layers(cb, owner_facts=giant):
             result = await cb.build(
-                owner_id=100, contact_id=None, query="hi", max_tokens=10,
+                owner_id=100,
+                contact_id=None,
+                query="hi",
+                max_tokens=10,
             )
         # Budget = 10 tokens × 4 chars/token = 40 chars
         assert len(result) <= 40
@@ -153,8 +194,6 @@ class TestBuild:
 # ---------------------------------------------------------------------------
 # Helper: get the real context_builder MODULE (not the ContextBuilder instance)
 # ---------------------------------------------------------------------------
-
-import sys
 
 
 def _ctx_module():
@@ -337,20 +376,60 @@ class TestBuildMessages:
         from contextlib import ExitStack
 
         stack = ExitStack()
-        stack.enter_context(patch.object(cb, "_owner_facts", new_callable=AsyncMock, return_value=owner_facts))
-        stack.enter_context(patch.object(cb, "_state_snapshot", return_value=state_snapshot or ["[User state: mood=neutral, msgs_today=0, streak=0d]"]))
-        stack.enter_context(patch.object(cb, "_contacts_roster", new_callable=AsyncMock, return_value=contacts_roster))
-        stack.enter_context(patch.object(cb, "_semantic_memories", new_callable=AsyncMock, return_value=semantic_memories))
-        stack.enter_context(patch.object(cb, "_summaries", new_callable=AsyncMock, return_value=summaries))
-        stack.enter_context(patch.object(cb, "_episodic", new_callable=AsyncMock, return_value=episodic))
-        stack.enter_context(patch.object(cb, "_conversation_history", new_callable=AsyncMock, return_value=conversation_history or []))
+        stack.enter_context(
+            patch.object(
+                cb, "_owner_facts", new_callable=AsyncMock, return_value=owner_facts
+            )
+        )
+        stack.enter_context(
+            patch.object(
+                cb,
+                "_state_snapshot",
+                return_value=state_snapshot
+                or ["[User state: mood=neutral, msgs_today=0, streak=0d]"],
+            )
+        )
+        stack.enter_context(
+            patch.object(
+                cb,
+                "_contacts_roster",
+                new_callable=AsyncMock,
+                return_value=contacts_roster,
+            )
+        )
+        stack.enter_context(
+            patch.object(
+                cb,
+                "_semantic_memories",
+                new_callable=AsyncMock,
+                return_value=semantic_memories,
+            )
+        )
+        stack.enter_context(
+            patch.object(
+                cb, "_summaries", new_callable=AsyncMock, return_value=summaries
+            )
+        )
+        stack.enter_context(
+            patch.object(cb, "_episodic", new_callable=AsyncMock, return_value=episodic)
+        )
+        stack.enter_context(
+            patch.object(
+                cb,
+                "_conversation_history",
+                new_callable=AsyncMock,
+                return_value=conversation_history or [],
+            )
+        )
         return stack
 
     async def test_returns_list_of_message_dicts(self) -> None:
         cb = ContextBuilder()
         with self._patch_all_layers_and_history(cb):
             result = await cb.build_messages(
-                owner_id=100, contact_id=None, query="hello",
+                owner_id=100,
+                contact_id=None,
+                query="hello",
                 system_prompt="You are helpful.",
             )
         assert isinstance(result, list)
@@ -361,7 +440,9 @@ class TestBuildMessages:
         cb = ContextBuilder()
         with self._patch_all_layers_and_history(cb):
             result = await cb.build_messages(
-                owner_id=100, contact_id=None, query="hi",
+                owner_id=100,
+                contact_id=None,
+                query="hi",
                 system_prompt="You are RaccBuddy.",
             )
         assert result[0]["role"] == "system"
@@ -371,7 +452,9 @@ class TestBuildMessages:
         cb = ContextBuilder()
         with self._patch_all_layers_and_history(cb):
             result = await cb.build_messages(
-                owner_id=100, contact_id=None, query="what's up?",
+                owner_id=100,
+                contact_id=None,
+                query="what's up?",
                 system_prompt="sys",
             )
         assert result[-1]["role"] == "user"
@@ -388,7 +471,9 @@ class TestBuildMessages:
         cb = ContextBuilder()
         with self._patch_all_layers_and_history(cb, conversation_history=[msg1, msg2]):
             result = await cb.build_messages(
-                owner_id=100, contact_id=None, query="new question",
+                owner_id=100,
+                contact_id=None,
+                query="new question",
                 system_prompt="sys",
             )
         # System + 2 history turns + current query = 4 messages
@@ -405,7 +490,9 @@ class TestBuildMessages:
             contacts_roster="[Known contacts: Alice]",
         ):
             result = await cb.build_messages(
-                owner_id=100, contact_id=None, query="hi",
+                owner_id=100,
+                contact_id=None,
+                query="hi",
                 system_prompt="You are Raccy.",
             )
         system_content = result[0]["content"]
@@ -417,7 +504,9 @@ class TestBuildMessages:
         cb = ContextBuilder()
         with self._patch_all_layers_and_history(cb, conversation_history=[]):
             result = await cb.build_messages(
-                owner_id=100, contact_id=None, query="first message",
+                owner_id=100,
+                contact_id=None,
+                query="first message",
                 system_prompt="sys",
             )
         # System + current query only

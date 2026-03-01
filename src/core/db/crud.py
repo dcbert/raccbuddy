@@ -8,7 +8,7 @@ from typing import Any, Sequence
 
 from sqlalchemy import desc, distinct, func, select
 
-from src.core.db.models import Contact, Habit, Message, MoodEntry, Relationship, RelationshipEvent, Summary
+from src.core.db.models import Contact, Habit, Message, Relationship, Summary
 from src.core.db.session import get_session
 
 logger = logging.getLogger(__name__)
@@ -203,9 +203,7 @@ async def get_contact_by_id(
 ) -> Contact | None:
     """Look up a contact by primary key."""
     async with get_session() as session:
-        result = await session.execute(
-            select(Contact).where(Contact.id == contact_id)
-        )
+        result = await session.execute(select(Contact).where(Contact.id == contact_id))
         return result.scalar_one_or_none()
 
 
@@ -469,9 +467,13 @@ async def count_messages_since(
     since: datetime.datetime,
 ) -> int:
     """Count messages in a chat since a timestamp."""
-    stmt = select(func.count()).select_from(Message).where(
-        Message.chat_id == owner_id,
-        Message.timestamp >= since,
+    stmt = (
+        select(func.count())
+        .select_from(Message)
+        .where(
+            Message.chat_id == owner_id,
+            Message.timestamp >= since,
+        )
     )
     async with get_session() as session:
         result = await session.execute(stmt)
@@ -484,10 +486,14 @@ async def count_messages_from_contact_since(
     since: datetime.datetime,
 ) -> int:
     """Count messages from a specific contact since a timestamp."""
-    stmt = select(func.count()).select_from(Message).where(
-        Message.from_contact_id == contact_id,
-        Message.chat_id == owner_id,
-        Message.timestamp >= since,
+    stmt = (
+        select(func.count())
+        .select_from(Message)
+        .where(
+            Message.from_contact_id == contact_id,
+            Message.chat_id == owner_id,
+            Message.timestamp >= since,
+        )
     )
     async with get_session() as session:
         result = await session.execute(stmt)

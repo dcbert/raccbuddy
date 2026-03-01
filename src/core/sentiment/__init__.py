@@ -5,7 +5,12 @@ Re-exports the full public API for backward compatibility.
 
 from __future__ import annotations
 
-from src.core.sentiment.analyzer import _MOODS, _VALENCE_MAP, MoodAnalyzer, mood_analyzer
+from src.core.sentiment.analyzer import (
+    _MOODS,
+    _VALENCE_MAP,
+    MoodAnalyzer,
+    mood_analyzer,
+)
 
 __all__ = [
     "MoodAnalyzer",

@@ -23,13 +23,11 @@ class BaseChatSkill(ABC):
 
     @property
     @abstractmethod
-    def name(self) -> str:
-        ...
+    def name(self) -> str: ...
 
     @property
     @abstractmethod
-    def description(self) -> str:
-        ...
+    def description(self) -> str: ...
 
     @property
     def system_prompt_fragment(self) -> str | None:
@@ -115,9 +113,7 @@ async def dispatch_skill_tool(
     """Try to execute a tool via the chat skills."""
     for skill in _chat_skills.values():
         owned_names = {
-            s["function"]["name"]
-            for s in skill.tool_schemas
-            if "function" in s
+            s["function"]["name"] for s in skill.tool_schemas if "function" in s
         }
         if tool_name in owned_names:
             return await skill.execute_tool(tool_name, arguments, owner_id)

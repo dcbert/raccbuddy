@@ -79,7 +79,9 @@ class TestSettings:
         assert fields["db_pool_timeout"].default > 0
         # Misc
         assert fields["max_tool_rounds"].default > 0
-        assert fields["api_secret_key"].default == ""  # empty = auth disabled by default
+        assert (
+            fields["api_secret_key"].default == ""
+        )  # empty = auth disabled by default
 
     def test_context_tokens_overridable(self) -> None:
         env = {

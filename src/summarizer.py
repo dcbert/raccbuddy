@@ -10,7 +10,12 @@ import datetime
 import logging
 
 from src.core.config import settings
-from src.core.db.crud import get_contacts_with_messages_since, get_messages_since, get_summary_for_date, save_summary
+from src.core.db.crud import (
+    get_contacts_with_messages_since,
+    get_messages_since,
+    get_summary_for_date,
+    save_summary,
+)
 from src.core.llm import embed, generate
 
 logger = logging.getLogger(__name__)
@@ -35,16 +40,21 @@ async def summarize_daily(contact_id: int) -> str | None:
     # Skip if summary already exists for today
     if await get_summary_for_date(contact_id, today):
         logger.info(
-            "Summary already exists for contact %d on %s", contact_id, today,
+            "Summary already exists for contact %d on %s",
+            contact_id,
+            today,
         )
         return None
 
     # Fetch today's messages attributed to this contact
     day_start = datetime.datetime.combine(
-        today, datetime.time.min, tzinfo=datetime.timezone.utc,
+        today,
+        datetime.time.min,
+        tzinfo=datetime.timezone.utc,
     )
     msgs = await get_messages_since(
-        from_contact_id=contact_id, since=day_start,
+        from_contact_id=contact_id,
+        since=day_start,
     )
 
     if not msgs:
@@ -91,7 +101,9 @@ async def summarize_all_contacts(platform: str | None = None) -> list[str]:
 
     today = datetime.date.today()
     day_start = datetime.datetime.combine(
-        today, datetime.time.min, tzinfo=datetime.timezone.utc,
+        today,
+        datetime.time.min,
+        tzinfo=datetime.timezone.utc,
     )
 
     contact_ids = await get_contacts_with_messages_since(day_start, platform)
@@ -116,7 +128,8 @@ async def summarize_all_contacts(platform: str | None = None) -> list[str]:
                     )
             except Exception:
                 logger.warning(
-                    "Failed to store semantic memory for contact %d", cid,
+                    "Failed to store semantic memory for contact %d",
+                    cid,
                 )
 
     logger.info("Summarized %d/%d contacts", len(summaries), len(contact_ids))

@@ -55,7 +55,9 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------------ #
     xai_api_key: str = ""
     xai_model: str = "grok-4-1-fast-reasoning"
-    xai_embed_model: str = "v1"  # Replace with actual xAI embed model name (check xAI docs)
+    xai_embed_model: str = (
+        "v1"  # Replace with actual xAI embed model name (check xAI docs)
+    )
     xai_embed_dimensions: int = 768
     xai_enable_builtin_tools: bool = False
     xai_temperature: float = 0.7

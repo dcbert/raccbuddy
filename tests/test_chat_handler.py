@@ -4,10 +4,17 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.handlers.chat import analyze_handler, chat_handler, contacts_handler, name_handler, relationship_handler
+from src.handlers.chat import (
+    analyze_handler,
+    chat_handler,
+    name_handler,
+    relationship_handler,
+)
 
 # Patch auth to always allow in tests (owner check bypassed)
-_AUTH_PATCH = patch("src.handlers.chat.reject_non_owner", new_callable=AsyncMock, return_value=False)
+_AUTH_PATCH = patch(
+    "src.handlers.chat.reject_non_owner", new_callable=AsyncMock, return_value=False
+)
 _OWNER_PATCH = patch("src.handlers.chat._owner_id", return_value=100)
 
 
@@ -160,7 +167,9 @@ class TestChatHandler:
         update.message.text = "Hey there"
         # Mock forward_origin properly
         forward_user = User(id=999, is_bot=False, first_name="Test")
-        update.message.forward_origin = MessageOriginUser(sender_user=forward_user, date=None)
+        update.message.forward_origin = MessageOriginUser(
+            sender_user=forward_user, date=None
+        )
         update.effective_user.id = 100
         update.effective_user.first_name = "Owner"
         update.effective_chat.id = 100
@@ -170,7 +179,7 @@ class TestChatHandler:
 
         # Should upsert with forwarded user's ID as handle
         mock_upsert.assert_called_once()
-        assert mock_upsert.call_args[1]['contact_handle'] == '999'
+        assert mock_upsert.call_args[1]["contact_handle"] == "999"
 
         mock_save.assert_any_call(
             platform="telegram",
@@ -218,7 +227,9 @@ class TestNameHandler:
 
     @_AUTH_PATCH
     @_OWNER_PATCH
-    async def test_no_args_shows_usage(self, mock_owner: MagicMock, mock_auth: AsyncMock) -> None:
+    async def test_no_args_shows_usage(
+        self, mock_owner: MagicMock, mock_auth: AsyncMock
+    ) -> None:
         update = MagicMock()
         update.effective_user.id = 100
         update.message.reply_text = AsyncMock()
@@ -233,7 +244,9 @@ class TestNameHandler:
 
     @_AUTH_PATCH
     @_OWNER_PATCH
-    async def test_no_forwarded_contact(self, mock_owner: MagicMock, mock_auth: AsyncMock) -> None:
+    async def test_no_forwarded_contact(
+        self, mock_owner: MagicMock, mock_auth: AsyncMock
+    ) -> None:
         from src.core.state import get_state
 
         update = MagicMock()
@@ -258,7 +271,9 @@ class TestAnalyzeHandler:
 
     @_AUTH_PATCH
     @_OWNER_PATCH
-    async def test_no_args_shows_usage(self, mock_owner: MagicMock, mock_auth: AsyncMock) -> None:
+    async def test_no_args_shows_usage(
+        self, mock_owner: MagicMock, mock_auth: AsyncMock
+    ) -> None:
         update = MagicMock()
         update.effective_user.id = 100
         update.message.reply_text = AsyncMock()
@@ -274,7 +289,9 @@ class TestAnalyzeHandler:
     @_AUTH_PATCH
     @_OWNER_PATCH
     @patch("src.handlers.chat._resolve_contact_by_name", new_callable=AsyncMock)
-    async def test_unknown_contact(self, mock_resolve: AsyncMock, mock_owner: MagicMock, mock_auth: AsyncMock) -> None:
+    async def test_unknown_contact(
+        self, mock_resolve: AsyncMock, mock_owner: MagicMock, mock_auth: AsyncMock
+    ) -> None:
         mock_resolve.return_value = None
 
         update = MagicMock()
@@ -296,7 +313,9 @@ class TestRelationshipHandler:
 
     @_AUTH_PATCH
     @_OWNER_PATCH
-    async def test_no_args_shows_usage(self, mock_owner: MagicMock, mock_auth: AsyncMock) -> None:
+    async def test_no_args_shows_usage(
+        self, mock_owner: MagicMock, mock_auth: AsyncMock
+    ) -> None:
         update = MagicMock()
         update.effective_user.id = 100
         update.message.reply_text = AsyncMock()
@@ -336,7 +355,8 @@ class TestSaveMessage:
 
     @patch("src.core.db.crud.get_session")
     async def test_saves_message_with_contact_id(
-        self, mock_get_session: MagicMock,
+        self,
+        mock_get_session: MagicMock,
     ) -> None:
         mock_session = AsyncMock()
         mock_session.__aenter__ = AsyncMock(return_value=mock_session)
@@ -359,7 +379,8 @@ class TestSaveMessage:
 
     @patch("src.core.db.crud.get_session")
     async def test_saves_owner_message_without_contact(
-        self, mock_get_session: MagicMock,
+        self,
+        mock_get_session: MagicMock,
     ) -> None:
         """Owner direct messages should have from_contact_id=None."""
         mock_session = AsyncMock()

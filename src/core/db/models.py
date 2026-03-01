@@ -6,7 +6,21 @@ import datetime
 from typing import Any, Optional
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import BigInteger, Boolean, Computed, Date, DateTime, Float, ForeignKey, Integer, SmallInteger, String, Text, UniqueConstraint, func
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    Computed,
+    Date,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    SmallInteger,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -29,7 +43,10 @@ class Contact(Base):
     __tablename__ = "contacts"
     __table_args__ = (
         UniqueConstraint(
-            "owner_id", "contact_handle", "platform", name="uq_owner_contact_handle",
+            "owner_id",
+            "contact_handle",
+            "platform",
+            name="uq_owner_contact_handle",
         ),
     )
 
@@ -38,7 +55,9 @@ class Contact(Base):
     contact_handle: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     contact_name: Mapped[str] = mapped_column(String(200), nullable=False)
     platform: Mapped[str] = mapped_column(
-        String(50), nullable=False, default="telegram",
+        String(50),
+        nullable=False,
+        default="telegram",
     )
 
 
@@ -49,12 +68,17 @@ class Message(Base):
     platform: Mapped[str] = mapped_column(String(50), nullable=False)
     chat_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
     from_contact_id: Mapped[Optional[int]] = mapped_column(
-        Integer, ForeignKey("contacts.id", ondelete="CASCADE"), nullable=True, index=True,
+        Integer,
+        ForeignKey("contacts.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
     )
     text: Mapped[str] = mapped_column(Text, nullable=False)
     is_bot_reply: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     timestamp: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False,
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
     )
 
 
@@ -63,7 +87,10 @@ class Summary(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     contact_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("contacts.id", ondelete="CASCADE"), nullable=False, index=True,
+        Integer,
+        ForeignKey("contacts.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     date: Mapped[datetime.date] = mapped_column(Date, nullable=False)
     summary_text: Mapped[str] = mapped_column(Text, nullable=False)
@@ -75,7 +102,10 @@ class Relationship(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     contact_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("contacts.id", ondelete="CASCADE"), nullable=False, unique=True,
+        Integer,
+        ForeignKey("contacts.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
     )
     score: Mapped[int] = mapped_column(Integer, default=50)
     metadata_: Mapped[dict[str, Any]] = mapped_column("metadata", JSONB, default=dict)
@@ -85,12 +115,15 @@ class Habit(Base):
     __tablename__ = "habits"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    owner_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True, default=0)
+    owner_id: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, index=True, default=0
+    )
     trigger: Mapped[str] = mapped_column(String(200), nullable=False)
     frequency: Mapped[float] = mapped_column(Float, default=0.0)
     correlation: Mapped[float] = mapped_column(Float, default=0.0)
     last_detected: Mapped[Optional[datetime.datetime]] = mapped_column(
-        DateTime(timezone=True), nullable=True,
+        DateTime(timezone=True),
+        nullable=True,
     )
     suggestion: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     category: Mapped[str] = mapped_column(String(50), nullable=False, default="general")
@@ -102,17 +135,26 @@ class PersistentUserState(Base):
     __tablename__ = "user_states"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    user_id: Mapped[int] = mapped_column(BigInteger, nullable=False, unique=True, index=True)
+    user_id: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, unique=True, index=True
+    )
     mood: Mapped[str] = mapped_column(String(50), nullable=False, default="neutral")
     last_active: Mapped[Optional[datetime.datetime]] = mapped_column(
-        DateTime(timezone=True), nullable=True,
+        DateTime(timezone=True),
+        nullable=True,
     )
     message_count_today: Mapped[int] = mapped_column(Integer, default=0)
     streak_days: Mapped[int] = mapped_column(Integer, default=0)
-    last_streak_date: Mapped[Optional[datetime.date]] = mapped_column(Date, nullable=True)
-    extra: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, server_default="{}")
+    last_streak_date: Mapped[Optional[datetime.date]] = mapped_column(
+        Date, nullable=True
+    )
+    extra: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, server_default="{}"
+    )
     updated_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False,
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
     )
 
 
@@ -125,16 +167,22 @@ class PersistentContactState(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     owner_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
     contact_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("contacts.id", ondelete="CASCADE"), nullable=False, index=True,
+        Integer,
+        ForeignKey("contacts.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     score: Mapped[int] = mapped_column(Integer, default=50)
     last_message_at: Mapped[Optional[datetime.datetime]] = mapped_column(
-        DateTime(timezone=True), nullable=True,
+        DateTime(timezone=True),
+        nullable=True,
     )
     message_count: Mapped[int] = mapped_column(Integer, default=0)
     mood: Mapped[str] = mapped_column(String(50), nullable=False, default="neutral")
     updated_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False,
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
     )
 
 
@@ -144,13 +192,20 @@ class MoodEntry(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     owner_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
     contact_id: Mapped[Optional[int]] = mapped_column(
-        Integer, ForeignKey("contacts.id", ondelete="CASCADE"), nullable=True, index=True,
+        Integer,
+        ForeignKey("contacts.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
     )
     mood: Mapped[str] = mapped_column(String(50), nullable=False)
     valence: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
-    message_snippet: Mapped[str] = mapped_column(String(200), nullable=False, default="")
+    message_snippet: Mapped[str] = mapped_column(
+        String(200), nullable=False, default=""
+    )
     created_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False,
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
     )
 
 
@@ -159,13 +214,18 @@ class RelationshipEvent(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     contact_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("contacts.id", ondelete="CASCADE"), nullable=False, index=True,
+        Integer,
+        ForeignKey("contacts.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     score_before: Mapped[int] = mapped_column(Integer, nullable=False)
     score_after: Mapped[int] = mapped_column(Integer, nullable=False)
     reason: Mapped[str] = mapped_column(String(200), nullable=False)
     created_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False,
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
     )
 
 
@@ -173,17 +233,22 @@ class ScheduledJobModel(Base):
     __tablename__ = "scheduled_jobs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    job_id: Mapped[str] = mapped_column(String(32), nullable=False, unique=True, index=True)
+    job_id: Mapped[str] = mapped_column(
+        String(32), nullable=False, unique=True, index=True
+    )
     owner_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
     message: Mapped[str] = mapped_column(Text, nullable=False)
     delay_minutes: Mapped[int] = mapped_column(Integer, nullable=False)
     reason: Mapped[str] = mapped_column(String(500), nullable=False, default="")
     fire_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False,
+        DateTime(timezone=True),
+        nullable=False,
     )
     executed: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False,
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
     )
 
 
@@ -208,7 +273,8 @@ class NudgeCooldown(Base):
     owner_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
     skill_name: Mapped[str] = mapped_column(String(200), nullable=False)
     last_fired_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False,
+        DateTime(timezone=True),
+        nullable=False,
     )
 
 
@@ -225,25 +291,37 @@ class SemanticMemory(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     owner_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
     contact_id: Mapped[Optional[int]] = mapped_column(
-        Integer, nullable=True, index=True,
+        Integer,
+        nullable=True,
+        index=True,
     )
     content: Mapped[str] = mapped_column(Text, nullable=False)
     embedding = mapped_column(Vector(EMBED_DIMENSIONS), nullable=False)
     importance: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=5)
     category: Mapped[str] = mapped_column(
-        String(50), nullable=False, default="general",
+        String(50),
+        nullable=False,
+        default="general",
     )
     metadata_: Mapped[dict[str, Any]] = mapped_column(
-        "metadata", JSONB, nullable=False, server_default="{}",
+        "metadata",
+        JSONB,
+        nullable=False,
+        server_default="{}",
     )
     created_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False,
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
     )
     updated_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False,
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
     )
     expires_at: Mapped[Optional[datetime.datetime]] = mapped_column(
-        DateTime(timezone=True), nullable=True,
+        DateTime(timezone=True),
+        nullable=True,
     )
     content_search = mapped_column(
         TSVECTOR,
@@ -260,19 +338,30 @@ class OwnerMemory(Base):
     content: Mapped[str] = mapped_column(Text, nullable=False)
     embedding = mapped_column(Vector(EMBED_DIMENSIONS), nullable=False)
     importance: Mapped[int] = mapped_column(
-        SmallInteger, nullable=False, default=OWNER_MEMORY_DEFAULT_IMPORTANCE,
+        SmallInteger,
+        nullable=False,
+        default=OWNER_MEMORY_DEFAULT_IMPORTANCE,
     )
     category: Mapped[str] = mapped_column(
-        String(50), nullable=False, default="fact",
+        String(50),
+        nullable=False,
+        default="fact",
     )
     metadata_: Mapped[dict[str, Any]] = mapped_column(
-        "metadata", JSONB, nullable=False, server_default="{}",
+        "metadata",
+        JSONB,
+        nullable=False,
+        server_default="{}",
     )
     created_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False,
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
     )
     updated_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False,
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
     )
     content_search = mapped_column(
         TSVECTOR,

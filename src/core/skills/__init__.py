@@ -29,8 +29,20 @@ from src.core.skills.chat import (
     run_pre_processors,
     unregister_chat_skill,
 )
-from src.core.skills.loader import _import_py_files, load_all_user_skills, load_user_chat_skills, load_user_nudge_skills
-from src.core.skills.nudge import BOREDOM_IDLE_MINUTES, CONTACT_QUIET_DAYS, ContactQuietSkill, EveningSkill, HabitSkill, IdleSkill
+from src.core.skills.loader import (
+    _import_py_files,
+    load_all_user_skills,
+    load_user_chat_skills,
+    load_user_nudge_skills,
+)
+from src.core.skills.nudge import (
+    BOREDOM_IDLE_MINUTES,
+    CONTACT_QUIET_DAYS,
+    ContactQuietSkill,
+    EveningSkill,
+    HabitSkill,
+    IdleSkill,
+)
 
 __all__ = [
     "BaseNudgeSkill",

@@ -30,7 +30,8 @@ raw_url = os.getenv(
     "postgresql+asyncpg://raccbuddy:raccbuddy@localhost:5432/raccbuddy",
 )
 sync_url = raw_url.replace("+asyncpg", "+psycopg2").replace(
-    "postgresql://", "postgresql+psycopg2://",
+    "postgresql://",
+    "postgresql+psycopg2://",
 )
 config.set_main_option("sqlalchemy.url", sync_url)
 

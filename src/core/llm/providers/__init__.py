@@ -39,9 +39,7 @@ def get_provider() -> BaseLLMProvider:
     cls = PROVIDER_REGISTRY.get(name)
     if cls is None:
         available = ", ".join(sorted(PROVIDER_REGISTRY))
-        raise ValueError(
-            f"Unknown LLM provider '{name}'. Available: {available}"
-        )
+        raise ValueError(f"Unknown LLM provider '{name}'. Available: {available}")
 
     _active_provider = cls()
     logger.info("LLM provider initialized: %s", _active_provider.name)
@@ -65,9 +63,7 @@ def get_embedding_provider() -> BaseLLMProvider:
     cls = PROVIDER_REGISTRY.get(name)
     if cls is None:
         available = ", ".join(sorted(PROVIDER_REGISTRY))
-        raise ValueError(
-            f"Unknown embedding provider '{name}'. Available: {available}"
-        )
+        raise ValueError(f"Unknown embedding provider '{name}'. Available: {available}")
 
     _active_embedding_provider = cls()
     logger.info("Embedding provider initialized: %s", _active_embedding_provider.name)

@@ -26,9 +26,13 @@ from telegram.ext import ContextTypes
 from src.core.auth import reject_non_owner
 from src.core.config import settings
 from src.core.db import save_message
-from src.core.llm import SYSTEM_PROMPT, generate, generate_chat, generate_with_tools, provider_supports_tools
+from src.core.llm import SYSTEM_PROMPT, generate_chat, provider_supports_tools
 from src.core.memory.context_builder import context_builder
-from src.core.skills.chat import collect_system_prompt_fragments, run_post_processors, run_pre_processors
+from src.core.skills.chat import (
+    collect_system_prompt_fragments,
+    run_post_processors,
+    run_pre_processors,
+)
 from src.core.state import get_state
 from src.core.voice import voice_manager
 
@@ -87,7 +91,8 @@ async def voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         # 1. Download the voice file from Telegram
         file = await voice.get_file()
         tmp_fd, tmp_name = tempfile.mkstemp(
-            suffix=".oga", prefix="raccbuddy_voice_",
+            suffix=".oga",
+            prefix="raccbuddy_voice_",
         )
         tmp_audio_path = Path(tmp_name)
         # Close the fd — python-telegram-bot will write the file
@@ -144,7 +149,10 @@ async def voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             reply = await _generate_with_tool_loop(ctx, text, owner)
         else:
             messages = await context_builder.build_messages(
-                owner, None, text, system,
+                owner,
+                None,
+                text,
+                system,
             )
             reply = await generate_chat(messages)
 
@@ -182,7 +190,9 @@ async def voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
                         caption=reply if reply_mode == "voice" else None,
                     )
             except Exception:
-                logger.warning("TTS synthesis failed, falling back to text", exc_info=True)
+                logger.warning(
+                    "TTS synthesis failed, falling back to text", exc_info=True
+                )
                 if reply_mode == "voice":
                     # Only send text if we haven't already
                     await update.message.reply_text(reply)
@@ -195,9 +205,7 @@ async def voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         )
     except RuntimeError as exc:
         logger.error("Voice processing error: %s", exc)
-        await processing_msg.edit_text(
-            f"Voice processing failed: {exc} 🦝"
-        )
+        await processing_msg.edit_text(f"Voice processing failed: {exc} 🦝")
     except Exception:
         logger.exception("Unexpected error in voice handler")
         await processing_msg.edit_text(

@@ -6,7 +6,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.core.scheduled import cancel_job, get_pending_jobs, schedule_llm_job, set_app_reference
+from src.core.scheduled import (
+    cancel_job,
+    get_pending_jobs,
+    schedule_llm_job,
+    set_app_reference,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -21,7 +26,9 @@ class TestScheduleLLMJob:
     """Validate job scheduling (DB-backed)."""
 
     @patch("src.core.db.session.get_session")
-    async def test_creates_job_and_returns_id(self, mock_get_session: MagicMock) -> None:
+    async def test_creates_job_and_returns_id(
+        self, mock_get_session: MagicMock
+    ) -> None:
         mock_session = AsyncMock()
         mock_session.__aenter__ = AsyncMock(return_value=mock_session)
         mock_session.__aexit__ = AsyncMock(return_value=False)
@@ -40,7 +47,9 @@ class TestScheduleLLMJob:
         mock_session.commit.assert_called_once()
 
     @patch("src.core.db.session.get_session")
-    async def test_multiple_jobs_get_unique_ids(self, mock_get_session: MagicMock) -> None:
+    async def test_multiple_jobs_get_unique_ids(
+        self, mock_get_session: MagicMock
+    ) -> None:
         mock_session = AsyncMock()
         mock_session.__aenter__ = AsyncMock(return_value=mock_session)
         mock_session.__aexit__ = AsyncMock(return_value=False)

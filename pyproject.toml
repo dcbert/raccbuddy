@@ -11,3 +11,9 @@ filterwarnings = [
     "ignore:coroutine 'AsyncMockMixin._execute_mock_call' was never awaited:RuntimeWarning",
     "ignore::pytest.PytestUnraisableExceptionWarning",
 ]
+
+[dependency-groups]
+dev = [
+    "black>=26.1.0",
+    "ruff>=0.15.4",
+]

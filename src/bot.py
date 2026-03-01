@@ -15,19 +15,37 @@ import logging
 import threading
 
 import uvicorn
-from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    ContextTypes,
+    MessageHandler,
+    filters,
+)
 
 from src.api import api
 from src.core.config import settings
 from src.core.db import init_db
 from src.core.memory import memory
 from src.core.nudges import run_nudge_skills
-from src.core.plugin_loader import load_user_plugins, register_all_with_app, teardown_all_plugins
+from src.core.plugin_loader import (
+    load_user_plugins,
+    register_all_with_app,
+    teardown_all_plugins,
+)
 from src.core.scheduled import restore_pending_jobs, set_app_reference
 from src.core.skills.base import load_cooldowns_from_db
 from src.core.skills.loader import load_all_user_skills
 from src.core.state import flush_all_dirty, load_all_states
-from src.handlers.chat import analyze_handler, chat_handler, contacts_handler, insights_handler, name_handler, relationship_handler, skills_handler
+from src.handlers.chat import (
+    analyze_handler,
+    chat_handler,
+    contacts_handler,
+    insights_handler,
+    name_handler,
+    relationship_handler,
+    skills_handler,
+)
 from src.handlers.start import start_handler
 from src.handlers.voice import voice_handler
 from src.summarizer import summarize_all_contacts
@@ -40,7 +58,9 @@ logger = logging.getLogger(__name__)
 
 # Suppress INFO logs from Telegram library (keep only WARNING and above)
 logging.getLogger("telegram").setLevel(logging.WARNING)
-logging.getLogger("httpx").setLevel(logging.WARNING)  # Telegram uses httpx for API calls
+logging.getLogger("httpx").setLevel(
+    logging.WARNING
+)  # Telegram uses httpx for API calls
 
 
 async def post_init(application: Application) -> None:

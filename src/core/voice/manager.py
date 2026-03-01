@@ -24,7 +24,12 @@ import tempfile
 from pathlib import Path
 
 from src.core.config import settings
-from src.core.voice.base import BaseSTTProvider, BaseTTSProvider, SynthesisResult, TranscriptionResult
+from src.core.voice.base import (
+    BaseSTTProvider,
+    BaseTTSProvider,
+    SynthesisResult,
+    TranscriptionResult,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -190,10 +195,14 @@ class VoiceManager:
         )
 
         await self._run_ffmpeg(
-            "-i", str(audio_path),
-            "-ar", "16000",
-            "-ac", "1",
-            "-f", "wav",
+            "-i",
+            str(audio_path),
+            "-ar",
+            "16000",
+            "-ac",
+            "1",
+            "-f",
+            "wav",
             str(wav_path),
         )
 
@@ -202,11 +211,16 @@ class VoiceManager:
     async def _convert_wav_to_ogg(self, wav_path: Path, ogg_path: Path) -> None:
         """Convert WAV to OGG Opus (Telegram voice message format)."""
         await self._run_ffmpeg(
-            "-i", str(wav_path),
-            "-c:a", "libopus",
-            "-b:a", "64k",
-            "-vbr", "on",
-            "-f", "ogg",
+            "-i",
+            str(wav_path),
+            "-c:a",
+            "libopus",
+            "-b:a",
+            "64k",
+            "-vbr",
+            "on",
+            "-f",
+            "ogg",
             str(ogg_path),
         )
 
@@ -234,9 +248,7 @@ class VoiceManager:
 
         if proc.returncode != 0:
             err_msg = stderr.decode().strip() if stderr else "unknown error"
-            raise RuntimeError(
-                f"ffmpeg failed (exit {proc.returncode}): {err_msg}"
-            )
+            raise RuntimeError(f"ffmpeg failed (exit {proc.returncode}): {err_msg}")
 
     # -- Guards -------------------------------------------------------------
 

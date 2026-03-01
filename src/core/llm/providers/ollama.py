@@ -15,7 +15,7 @@ Key behaviour:
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import Optional
 
 import httpx
 from openai import AsyncOpenAI

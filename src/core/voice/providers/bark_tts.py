@@ -208,7 +208,9 @@ class BarkTTSProvider(BaseTTSProvider):
         logger.info("Bark model loaded successfully: %s", self._model_id)
 
     def _generate_audio(
-        self, text: str, voice_preset: str,
+        self,
+        text: str,
+        voice_preset: str,
     ) -> tuple[Any, int]:
         """Run Bark generation (synchronous, called in executor).
 

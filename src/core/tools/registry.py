@@ -98,9 +98,7 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "summarize_contact",
-            "description": (
-                "Generate a daily conversation summary for a contact."
-            ),
+            "description": ("Generate a daily conversation summary for a contact."),
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -138,9 +136,7 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
                     },
                     "reason": {
                         "type": "string",
-                        "description": (
-                            "Brief reason for scheduling (for logging)."
-                        ),
+                        "description": ("Brief reason for scheduling (for logging)."),
                     },
                 },
                 "required": ["message", "delay_minutes"],
@@ -169,8 +165,14 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
                     "category": {
                         "type": "string",
                         "enum": [
-                            "preference", "trait", "joke", "emotion",
-                            "reflection", "fact", "goal", "routine",
+                            "preference",
+                            "trait",
+                            "joke",
+                            "emotion",
+                            "reflection",
+                            "fact",
+                            "goal",
+                            "routine",
                             "boundary",
                         ],
                         "description": "Category of the memory.",

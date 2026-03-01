@@ -127,7 +127,9 @@ async def _persist_cooldown(
     except Exception:
         logger.warning(
             "Failed to persist cooldown for owner=%d skill=%s",
-            owner_id, skill_name, exc_info=True,
+            owner_id,
+            skill_name,
+            exc_info=True,
         )
 
 
