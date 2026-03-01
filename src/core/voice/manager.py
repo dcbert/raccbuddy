@@ -190,9 +190,12 @@ class VoiceManager:
         if audio_path.suffix.lower() in (".wav",):
             return audio_path
 
-        wav_path = Path(
-            tempfile.mktemp(suffix=".wav", prefix="raccbuddy_stt_"),
-        )
+        with tempfile.NamedTemporaryFile(
+            suffix=".wav",
+            prefix="raccbuddy_stt_",
+            delete=False,
+        ) as tmp:
+            wav_path = Path(tmp.name)
 
         await self._run_ffmpeg(
             "-i",
