@@ -26,6 +26,7 @@ class TestExecuteNudgeFromAgent:
         bot.send_message.assert_called_once_with(
             chat_id=12345,
             text="Hey there!",
+            parse_mode="HTML",
         )
 
     @pytest.mark.asyncio

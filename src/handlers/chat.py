@@ -44,6 +44,7 @@ from src.core.state import (
     update_contact_state,
 )
 from src.core.tools import execute_tool, get_all_tool_schemas
+from src.utils.telegram_format import md_to_telegram_html
 
 logger = logging.getLogger(__name__)
 
@@ -148,7 +149,7 @@ async def chat_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         # Run chat-skill post-processors
         reply = await run_post_processors(reply, owner)
 
-        await update.message.reply_text(reply)
+        await update.message.reply_text(md_to_telegram_html(reply), parse_mode="HTML")
 
         # Persist bot reply for conversation history
         try:
@@ -329,7 +330,10 @@ async def analyze_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             f"patterns, emotional tone, suggestions. Max 150 words."
         )
         reply = await generate(prompt)
-        await update.message.reply_text(f"📊 Analysis for {name}:\n\n{reply}")
+        await update.message.reply_text(
+            md_to_telegram_html(f"📊 Analysis for {name}:\n\n{reply}"),
+            parse_mode="HTML",
+        )
     except Exception:
         logger.exception("Failed to analyze contact %s", name)
         await update.message.reply_text(
@@ -373,7 +377,10 @@ async def insights_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             f"sentiment shifts, notable patterns. Max 150 words."
         )
         reply = await generate(prompt)
-        await update.message.reply_text(f"💡 Insights for {name}:\n\n{reply}")
+        await update.message.reply_text(
+            md_to_telegram_html(f"💡 Insights for {name}:\n\n{reply}"),
+            parse_mode="HTML",
+        )
     except Exception:
         logger.exception("Failed to get insights for contact %s", name)
         await update.message.reply_text("Something went wrong getting insights 🦝")
@@ -498,6 +505,7 @@ async def _generate_with_tool_loop(
                 tc.arguments,
             )
             tool_result = await execute_tool(tc.name, tc.arguments, owner_id)
+            logger.info("Tool result: %s", str(tool_result)[:500])
             messages.append(
                 {
                     "role": "tool",
@@ -526,10 +534,12 @@ def _safe_json_dumps(obj: object) -> str:
 
 def _build_system_prompt() -> str:
     """Build the system prompt with chat-skill fragments appended."""
+    today = datetime.date.today().strftime("%B %d, %Y")
+    base_prompt = f"Today is {today}.\n\n{SYSTEM_PROMPT}"
     fragments = collect_system_prompt_fragments()
     if fragments:
-        return f"{SYSTEM_PROMPT}\n\n{fragments}"
-    return SYSTEM_PROMPT
+        return f"{base_prompt}\n\n{fragments}"
+    return base_prompt
 
 
 # -------------------------------------------------------------------

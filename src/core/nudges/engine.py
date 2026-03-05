@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 
 from src.core.config import settings
+from src.utils.telegram_format import md_to_telegram_html
 from src.core.db.crud import get_all_habits
 from src.core.llm.interface import generate
 from src.core.skills.base import (
@@ -108,7 +109,11 @@ async def send_nudge(
     """Generate LLM text and deliver the nudge to the user."""
     try:
         response = await generate(prompt)
-        await bot.send_message(chat_id=user_id, text=response)  # type: ignore[attr-defined]
+        await bot.send_message(  # type: ignore[attr-defined]
+            chat_id=user_id,
+            text=md_to_telegram_html(response),
+            parse_mode="HTML",
+        )
         logger.info("Nudge sent to user %d (trigger: %s)", user_id, trigger)
     except Exception:
         logger.exception("Failed to send nudge to user %d", user_id)
@@ -132,7 +137,11 @@ async def execute_nudge_from_agent(
         text: The final nudge text to deliver.
     """
     try:
-        await bot.send_message(chat_id=user_id, text=text)  # type: ignore[attr-defined]
+        await bot.send_message(  # type: ignore[attr-defined]
+            chat_id=user_id,
+            text=md_to_telegram_html(text),
+            parse_mode="HTML",
+        )
         logger.info(
             "Agentic nudge sent to user %d (trigger: %s)",
             user_id,

@@ -198,6 +198,9 @@ class TestXAIProvider:
     ) -> None:
         mock_settings.xai_api_key = "test-key"
         mock_settings.xai_model = "grok-4-1-fast-reasoning"
+        mock_settings.xai_enable_builtin_tools = False
+        mock_settings.xai_temperature = 0.7
+        mock_settings.xai_max_retries = 3
 
         mock_client = _make_xai_mock({"content": "Grok says hi"})
         mock_client_cls.return_value = mock_client
@@ -221,6 +224,59 @@ class TestXAIProvider:
         with pytest.raises(RuntimeError, match="xAI not configured"):
             await provider.generate("hello", "system")
 
+    @patch("src.core.llm.providers.xai.settings")
+    @patch("src.core.llm.providers.xai.AsyncClient")
+    async def test_xai_generate_retries_on_grpc_error(
+        self,
+        mock_client_cls: MagicMock,
+        mock_settings: MagicMock,
+    ) -> None:
+        """Test that transient gRPC errors trigger retry + client reconnection."""
+        import grpc
+
+        mock_settings.xai_api_key = "test-key"
+        mock_settings.xai_model = "grok-4-1-fast-reasoning"
+        mock_settings.xai_enable_builtin_tools = False
+        mock_settings.xai_temperature = 0.7
+        mock_settings.xai_max_retries = 3
+
+        # First call raises a transient gRPC error, second succeeds
+        grpc_error = grpc.aio.AioRpcError(
+            code=grpc.StatusCode.UNKNOWN,
+            initial_metadata=grpc.aio.Metadata(),
+            trailing_metadata=grpc.aio.Metadata(),
+            details="h2 protocol error: error reading a body from connection",
+        )
+
+        ok_response = MagicMock()
+        ok_response.content = "Retry success"
+        ok_response.tool_calls = []
+
+        chat_fail = MagicMock()
+        chat_fail.sample = AsyncMock(side_effect=grpc_error)
+
+        chat_ok = MagicMock()
+        chat_ok.sample = AsyncMock(return_value=ok_response)
+
+        # First client fails, second (after reconnect) succeeds
+        client1 = MagicMock()
+        client1.chat = MagicMock()
+        client1.chat.create = MagicMock(return_value=chat_fail)
+
+        client2 = MagicMock()
+        client2.chat = MagicMock()
+        client2.chat.create = MagicMock(return_value=chat_ok)
+
+        mock_client_cls.side_effect = [client1, client2]
+
+        from src.core.llm.providers.xai import XAIProvider
+
+        provider = XAIProvider()
+        result = await provider.generate("hello", "system")
+        assert result == "Retry success"
+        # Client was recreated once (after the first failure)
+        assert mock_client_cls.call_count == 2
+
     @patch("src.core.llm.providers.xai.AsyncClient")
     async def test_xai_embed_uses_xai_api(
         self,
@@ -239,10 +295,10 @@ class TestXAIProvider:
 class TestProviderToolSupport:
     """Validate supports_tools property and facade."""
 
-    def test_ollama_does_not_support_tools(self) -> None:
+    def test_ollama_supports_tools(self) -> None:
         from src.core.llm.providers.ollama import OllamaProvider
 
-        assert OllamaProvider().supports_tools is False
+        assert OllamaProvider().supports_tools is True
 
     def test_xai_supports_tools(self) -> None:
         from src.core.llm.providers.xai import XAIProvider
@@ -250,8 +306,8 @@ class TestProviderToolSupport:
         assert XAIProvider().supports_tools is True
 
     def test_facade_provider_supports_tools_default(self) -> None:
-        # Default provider is Ollama
-        assert provider_supports_tools() is False
+        # Default provider is Ollama (which now supports tools)
+        assert provider_supports_tools() is True
 
 
 @pytest.mark.asyncio
@@ -259,12 +315,12 @@ class TestGenerateWithTools:
     """Validate generate_with_tools facade."""
 
     @patch("src.core.llm.providers.ollama.httpx.AsyncClient")
-    async def test_fallback_for_non_tool_provider(
+    async def test_ollama_generate_with_tools_no_tool_calls(
         self,
         mock_client_cls: MagicMock,
     ) -> None:
-        """Ollama provider should fall back to plain generate."""
-        mock_client = _make_httpx_mock({"response": "plain answer"})
+        """Ollama generate_with_tools returns plain text when no tools invoked."""
+        mock_client = _make_httpx_mock({"message": {"content": "plain answer"}})
         mock_client_cls.return_value = mock_client
 
         messages = [
@@ -276,6 +332,38 @@ class TestGenerateWithTools:
         assert result.text == "plain answer"
         assert result.finished is True
         assert result.tool_calls == []
+
+    @patch("src.core.llm.providers.ollama.httpx.AsyncClient")
+    async def test_ollama_generate_with_tools_parses_tool_calls(
+        self,
+        mock_client_cls: MagicMock,
+    ) -> None:
+        """Ollama generate_with_tools correctly parses tool call responses."""
+        mock_client = _make_httpx_mock(
+            {
+                "message": {
+                    "content": "",
+                    "tool_calls": [
+                        {
+                            "function": {
+                                "name": "list_contacts",
+                                "arguments": {},
+                            },
+                        },
+                    ],
+                },
+            }
+        )
+        mock_client_cls.return_value = mock_client
+
+        messages = [{"role": "user", "content": "show contacts"}]
+        tools = [{"type": "function", "function": {"name": "list_contacts"}}]
+        result = await generate_with_tools(messages, tools)
+        assert isinstance(result, GenerationResult)
+        assert result.finished is False
+        assert len(result.tool_calls) == 1
+        assert result.tool_calls[0].name == "list_contacts"
+        assert result.tool_calls[0].id.startswith("ollama_")
 
 
 @pytest.mark.asyncio
@@ -291,6 +379,9 @@ class TestXAIToolCalling:
     ) -> None:
         mock_settings.xai_api_key = "test-key"
         mock_settings.xai_model = "grok-4-1-fast-reasoning"
+        mock_settings.xai_enable_builtin_tools = False
+        mock_settings.xai_temperature = 0.7
+        mock_settings.xai_max_retries = 3
         # Build a fake SDK-style tool_call object
         tc = MagicMock()
         tc.id = "call_123"
@@ -322,6 +413,9 @@ class TestXAIToolCalling:
     ) -> None:
         mock_settings.xai_api_key = "test-key"
         mock_settings.xai_model = "grok-4-1-fast-reasoning"
+        mock_settings.xai_enable_builtin_tools = False
+        mock_settings.xai_temperature = 0.7
+        mock_settings.xai_max_retries = 3
 
         mock_client = _make_xai_mock({"content": "Here you go!", "tool_calls": []})
         mock_client_cls.return_value = mock_client
@@ -419,6 +513,9 @@ class TestXAIGenerateChat:
     ) -> None:
         mock_settings.xai_api_key = "test-key"
         mock_settings.xai_model = "grok-4-1-fast-reasoning"
+        mock_settings.xai_enable_builtin_tools = False
+        mock_settings.xai_temperature = 0.7
+        mock_settings.xai_max_retries = 3
 
         mock_client = _make_xai_mock({"content": "multi-turn xai reply"})
         mock_client_cls.return_value = mock_client
@@ -449,6 +546,9 @@ class TestXAIGenerateChat:
     ) -> None:
         mock_settings.xai_api_key = "test-key"
         mock_settings.xai_model = "grok-4-1-fast-reasoning"
+        mock_settings.xai_enable_builtin_tools = False
+        mock_settings.xai_temperature = 0.7
+        mock_settings.xai_max_retries = 3
 
         mock_client = _make_xai_mock({"content": ""})
         mock_client_cls.return_value = mock_client

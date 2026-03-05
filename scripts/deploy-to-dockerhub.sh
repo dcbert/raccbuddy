@@ -78,6 +78,15 @@ docker buildx build --platform ${PLATFORMS} \
 echo -e "${GREEN}✓ WhatsApp service image built and pushed${NC}"
 echo ""
 
+#Ask user if they want to create backups
+echo -e "${YELLOW}Do you want to create backups of your database and WhatsApp session data? (Recommended before deploying to Umbrel) [y/N]${NC}"
+read -r backup_choice
+if [[ ! "$backup_choice" =~ ^[Yy]$ ]]; then
+    echo -e "${YELLOW}Skipping backups. You can create them later by running this script again.${NC}"
+    exit 0
+fi
+
+
 # Step 6: Create backup directory
 echo -e "${GREEN}=== Creating backup directory ===${NC}"
 mkdir -p "$BACKUP_DIR"

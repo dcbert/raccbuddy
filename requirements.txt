@@ -23,6 +23,9 @@ psycopg[binary]>=3.1.0,<4.0
 langfuse>=3.0.0,<4.0;python_version>="3.12"
 prometheus-client>=0.20.0,<1.0
 
+# Scheduling (cron expressions)
+croniter>=2.0.0,<3.0
+
 # Migrations
 alembic>=1.13.0,<2.0
 psycopg2-binary>=2.9.0,<3.0
@@ -34,5 +37,11 @@ pytest-asyncio>=0.23.0,<1.0
 # Voice (STT + TTS) — optional, only needed when VOICE_ENABLED=true
 # Install with: pip install -r requirements-voice.txt
 
+# Web search
+duckduckgo-search>=7.0.0,<8.0
+
 # LLM Providers
 xai-sdk>=1.6.0,<2.0
+
+#Skills
+ddgs>=9.11.1,<10.0

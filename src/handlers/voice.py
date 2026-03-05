@@ -173,7 +173,11 @@ async def voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         reply_mode = settings.voice_reply_mode
 
         if reply_mode in ("text", "both"):
-            await update.message.reply_text(reply)
+            from src.utils.telegram_format import md_to_telegram_html
+
+            await update.message.reply_text(
+                md_to_telegram_html(reply), parse_mode="HTML"
+            )
 
         if reply_mode in ("voice", "both"):
             try:

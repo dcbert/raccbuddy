@@ -37,6 +37,7 @@ from src.core.db.crud import (
 
 # Models
 from src.core.db.models import (
+    AppLog,
     Base,
     Contact,
     Habit,
@@ -67,6 +68,7 @@ __all__ = [
     "PersistentUserState",
     "Relationship",
     "RelationshipEvent",
+    "AppLog",
     "ScheduledJobModel",
     "SemanticMemory",
     "Summary",

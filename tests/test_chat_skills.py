@@ -209,18 +209,26 @@ class TestSkillLoader:
 
 class TestBuildSystemPrompt:
     def test_plain_without_skills(self) -> None:
+        import datetime
+
         from src.core.llm import SYSTEM_PROMPT
         from src.handlers.chat import _build_system_prompt
 
-        assert _build_system_prompt() == SYSTEM_PROMPT
+        today = datetime.date.today().strftime("%B %d, %Y")
+        expected = f"Today is {today}.\n\n{SYSTEM_PROMPT}"
+        assert _build_system_prompt() == expected
 
     def test_appends_fragments(self) -> None:
+        import datetime
+
         from src.core.llm import SYSTEM_PROMPT
         from src.handlers.chat import _build_system_prompt
 
+        today = datetime.date.today().strftime("%B %d, %Y")
+        expected_prefix = f"Today is {today}.\n\n{SYSTEM_PROMPT}"
         register_chat_skill(_PromptSkill())
         result = _build_system_prompt()
-        assert result.startswith(SYSTEM_PROMPT)
+        assert result.startswith(expected_prefix)
         assert "Be extra helpful" in result
 
 

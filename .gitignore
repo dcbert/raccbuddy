@@ -46,3 +46,6 @@ dmypy.json
 
 # Node (whatsapp-service)
 node_modules/
+
+# Backups
+backups/
