@@ -74,7 +74,9 @@ class TestChatHandler:
         # build_messages called with owner, contact_id=None, text, system prompt
         mock_build.assert_called_once()
         mock_generate.assert_called_once()
-        update.message.reply_text.assert_called_once_with("Hey legend! 🦝")
+        update.message.reply_text.assert_called_once_with(
+            "Hey legend! 🦝", parse_mode="HTML"
+        )
 
     async def test_no_message_returns_early(self) -> None:
         update = MagicMock()

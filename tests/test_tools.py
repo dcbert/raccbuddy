@@ -2,11 +2,17 @@
 
 from __future__ import annotations
 
+import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from src.core.tools import TOOL_SCHEMAS, execute_tool, parse_tool_arguments
+
+
+def _parse(result: str) -> dict:
+    """Parse a structured JSON tool response."""
+    return json.loads(result)
 
 
 # Ensure Ollama provider is used during tool tests (avoids .env interference)
@@ -69,11 +75,14 @@ class TestParseToolArguments:
 
 @pytest.mark.asyncio
 class TestExecuteTool:
-    """Validate tool execution."""
+    """Validate tool execution returns structured JSON."""
 
-    async def test_unknown_tool_returns_error(self) -> None:
+    async def test_unknown_tool_returns_structured_error(self) -> None:
         result = await execute_tool("nonexistent_tool", {}, owner_id=123)
-        assert "Error: unknown tool" in result
+        data = _parse(result)
+        assert data["status"] == "error"
+        assert data["error_code"] == "unknown_tool"
+        assert "nonexistent_tool" in data["message"]
 
     @patch("src.core.db.crud.get_all_contacts_all_platforms")
     async def test_list_contacts_empty(
@@ -82,7 +91,12 @@ class TestExecuteTool:
     ) -> None:
         mock_get_contacts.return_value = []
         result = await execute_tool("list_contacts", {}, owner_id=123)
-        assert "No contacts found" in result
+        data = _parse(result)
+        assert data["status"] == "success"
+        assert data["total"] == 0
+        assert data["contacts"] == []
+        assert "No contacts found" in data["message"]
+        assert "final_instruction" in data
 
     @patch("src.core.db.crud.get_all_contacts_all_platforms")
     async def test_list_contacts_with_data(
@@ -95,8 +109,12 @@ class TestExecuteTool:
         mock_get_contacts.return_value = [contact]
 
         result = await execute_tool("list_contacts", {}, owner_id=123)
-        assert "Giulia" in result
-        assert "telegram" in result
+        data = _parse(result)
+        assert data["status"] == "success"
+        assert data["total"] == 1
+        assert data["contacts"][0]["name"] == "Giulia"
+        assert data["contacts"][0]["platform"] == "telegram"
+        assert "final_instruction" in data
 
     @patch("src.core.db.crud.get_relationship")
     @patch("src.core.db.crud.get_contact_by_name_any_platform")
@@ -118,8 +136,11 @@ class TestExecuteTool:
             {"contact_name": "Giulia"},
             owner_id=123,
         )
-        assert "85" in result
-        assert "Giulia" in result
+        data = _parse(result)
+        assert data["status"] == "success"
+        assert data["score"] == 85
+        assert data["contact_name"] == "Giulia"
+        assert "final_instruction" in data
 
     @patch("src.core.db.crud.get_contact_by_name_any_platform")
     async def test_analyze_contact_not_found(
@@ -132,18 +153,92 @@ class TestExecuteTool:
             {"contact_name": "Unknown"},
             owner_id=123,
         )
-        assert "not found" in result
+        data = _parse(result)
+        assert data["status"] == "error"
+        assert data["error_code"] == "contact_not_found"
+        assert "not found" in data["message"]
 
     @patch("src.core.scheduled.jobs.schedule_llm_job")
     async def test_schedule_message(
         self,
         mock_schedule: AsyncMock,
     ) -> None:
-        mock_schedule.return_value = "abc123"
+        from src.core.scheduled.jobs import ScheduleResult
+
+        mock_schedule.return_value = ScheduleResult("abc123", is_duplicate=False)
         result = await execute_tool(
             "schedule_message",
             {"message": "Hey!", "delay_minutes": 60, "reason": "reminder"},
             owner_id=123,
         )
-        assert "abc123" in result
-        assert "1h" in result
+        data = _parse(result)
+        assert data["status"] == "success"
+        assert data["job_id"] == "abc123"
+        assert data["delay"] == "1h"
+        assert "final_instruction" in data
+
+    @patch("src.core.scheduled.jobs.schedule_llm_job")
+    async def test_schedule_message_duplicate(
+        self,
+        mock_schedule: AsyncMock,
+    ) -> None:
+        from src.core.scheduled.jobs import ScheduleResult
+
+        mock_schedule.return_value = ScheduleResult("dup789", is_duplicate=True)
+        result = await execute_tool(
+            "schedule_message",
+            {"message": "Hey!", "delay_minutes": 60},
+            owner_id=123,
+        )
+        data = _parse(result)
+        assert data["status"] == "already_exists"
+        assert data["job_id"] == "dup789"
+        assert "final_instruction" in data
+
+    async def test_schedule_message_invalid_delay(self) -> None:
+        result = await execute_tool(
+            "schedule_message",
+            {"message": "Hey!", "delay_minutes": 0},
+            owner_id=123,
+        )
+        data = _parse(result)
+        assert data["status"] == "invalid_input"
+        assert data["error_code"] == "invalid_delay"
+
+    async def test_schedule_message_empty_message(self) -> None:
+        result = await execute_tool(
+            "schedule_message",
+            {"message": "", "delay_minutes": 60},
+            owner_id=123,
+        )
+        data = _parse(result)
+        assert data["status"] == "invalid_input"
+        assert data["error_code"] == "missing_required_field"
+
+    async def test_analyze_contact_empty_name(self) -> None:
+        result = await execute_tool(
+            "analyze_contact",
+            {"contact_name": ""},
+            owner_id=123,
+        )
+        data = _parse(result)
+        assert data["status"] == "invalid_input"
+
+    async def test_web_search_empty_query(self) -> None:
+        result = await execute_tool(
+            "web_search",
+            {"query": ""},
+            owner_id=123,
+        )
+        data = _parse(result)
+        assert data["status"] == "invalid_input"
+
+    async def test_browse_webpage_invalid_url(self) -> None:
+        result = await execute_tool(
+            "browse_webpage",
+            {"url": "not-a-url"},
+            owner_id=123,
+        )
+        data = _parse(result)
+        assert data["status"] == "invalid_input"
+        assert data["error_code"] == "invalid_url"

@@ -251,6 +251,24 @@ class ScheduledJobModel(Base):
         nullable=False,
     )
 
+    # Recurrence fields
+    recurrence_type: Mapped[Optional[str]] = mapped_column(
+        String(20), nullable=True, default=None
+    )
+    recurrence_rule: Mapped[Optional[str]] = mapped_column(
+        String(200), nullable=True, default=None
+    )
+    next_fire_at: Mapped[Optional[datetime.datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_executed_at: Mapped[Optional[datetime.datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    last_response: Mapped[Optional[str]] = mapped_column(
+        Text, nullable=True, default=None
+    )
+
 
 # ---------------------------------------------------------------------------
 # Nudge cooldown persistence
@@ -327,6 +345,38 @@ class SemanticMemory(Base):
         TSVECTOR,
         Computed("to_tsvector('english', content)", persisted=True),
         nullable=True,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Application-wide error / warning log
+# ---------------------------------------------------------------------------
+
+
+class AppLog(Base):
+    """Persists WARNING-level-and-above log records from the entire application.
+
+    Populated automatically by ``DatabaseLogHandler`` (see
+    ``src.core.db.log_handler``), which is attached to the root logger at
+    startup.  Captures the Python logging level, logger name, formatted
+    message, optional traceback, and source-code location so that warnings
+    and errors can be queried, audited, and correlated after the fact.
+    """
+
+    __tablename__ = "app_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    level: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    logger_name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    traceback: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    module: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    func_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    line_no: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
     )
 
 

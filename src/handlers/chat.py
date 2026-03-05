@@ -44,6 +44,7 @@ from src.core.state import (
     update_contact_state,
 )
 from src.core.tools import execute_tool, get_all_tool_schemas
+from src.utils.telegram_format import md_to_telegram_html
 
 logger = logging.getLogger(__name__)
 
@@ -132,23 +133,23 @@ async def chat_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
         system = _build_system_prompt()
 
+        # Always use proper multi-turn messages for conversation coherence
+        messages = await context_builder.build_messages(
+            owner,
+            contact_id,
+            text,
+            system,
+        )
+
         if provider_supports_tools():
-            ctx = await context_builder.build(owner, contact_id, text)
-            reply = await _generate_with_tool_loop(ctx, text, owner)
+            reply = await _generate_with_tool_loop(messages, owner)
         else:
-            # Use proper multi-turn messages for conversation coherence
-            messages = await context_builder.build_messages(
-                owner,
-                contact_id,
-                text,
-                system,
-            )
             reply = await generate_chat(messages)
 
         # Run chat-skill post-processors
         reply = await run_post_processors(reply, owner)
 
-        await update.message.reply_text(reply)
+        await update.message.reply_text(md_to_telegram_html(reply), parse_mode="HTML")
 
         # Persist bot reply for conversation history
         try:
@@ -329,7 +330,10 @@ async def analyze_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             f"patterns, emotional tone, suggestions. Max 150 words."
         )
         reply = await generate(prompt)
-        await update.message.reply_text(f"📊 Analysis for {name}:\n\n{reply}")
+        await update.message.reply_text(
+            md_to_telegram_html(f"📊 Analysis for {name}:\n\n{reply}"),
+            parse_mode="HTML",
+        )
     except Exception:
         logger.exception("Failed to analyze contact %s", name)
         await update.message.reply_text(
@@ -373,7 +377,10 @@ async def insights_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             f"sentiment shifts, notable patterns. Max 150 words."
         )
         reply = await generate(prompt)
-        await update.message.reply_text(f"💡 Insights for {name}:\n\n{reply}")
+        await update.message.reply_text(
+            md_to_telegram_html(f"💡 Insights for {name}:\n\n{reply}"),
+            parse_mode="HTML",
+        )
     except Exception:
         logger.exception("Failed to get insights for contact %s", name)
         await update.message.reply_text("Something went wrong getting insights 🦝")
@@ -447,29 +454,19 @@ async def contacts_handler(
 
 
 async def _generate_with_tool_loop(
-    context_str: str,
-    user_message: str,
+    messages: list[dict],
     owner_id: int,
 ) -> str:
-    """Run a generate → tool-call → feed-result loop until the model
+    """Run a generate -> tool-call -> feed-result loop until the model
     produces a final text answer or the round limit is hit.
 
     Args:
-        context_str: Pre-built context from memory module.
-        user_message: The raw user message.
+        messages: Pre-built multi-turn messages list from context_builder.build_messages().
         owner_id: Telegram owner ID for tool execution.
 
     Returns:
-        The final text reply from the model.
+        The final text reply from the model (tool diagnostics are logged, not returned).
     """
-    messages: list[dict] = [
-        {"role": "system", "content": _build_system_prompt()},
-        {
-            "role": "user",
-            "content": f"{context_str}\n\n{user_message}",
-        },
-    ]
-
     all_tools = get_all_tool_schemas()
 
     for _round in range(settings.max_tool_rounds):
@@ -480,6 +477,10 @@ async def _generate_with_tool_loop(
 
         if not result.tool_calls:
             return result.text or "🦝"
+
+        # Log intermediate text (tool reasoning/diagnostics) — don't send to user
+        if result.text:
+            logger.info("Tool-loop round %d reasoning: %s", _round, result.text[:500])
 
         # Append the assistant message with tool calls
         assistant_msg: dict = {"role": "assistant", "content": result.text or ""}
@@ -504,6 +505,7 @@ async def _generate_with_tool_loop(
                 tc.arguments,
             )
             tool_result = await execute_tool(tc.name, tc.arguments, owner_id)
+            logger.info("Tool result: %s", str(tool_result)[:500])
             messages.append(
                 {
                     "role": "tool",
@@ -532,10 +534,12 @@ def _safe_json_dumps(obj: object) -> str:
 
 def _build_system_prompt() -> str:
     """Build the system prompt with chat-skill fragments appended."""
+    today = datetime.date.today().strftime("%B %d, %Y")
+    base_prompt = f"Today is {today}.\n\n{SYSTEM_PROMPT}"
     fragments = collect_system_prompt_fragments()
     if fragments:
-        return f"{SYSTEM_PROMPT}\n\n{fragments}"
-    return SYSTEM_PROMPT
+        return f"{base_prompt}\n\n{fragments}"
+    return base_prompt
 
 
 # -------------------------------------------------------------------

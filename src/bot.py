@@ -46,6 +46,7 @@ from src.handlers.chat import (
     relationship_handler,
     skills_handler,
 )
+from src.handlers.jobs import cancel_handler, jobs_handler, schedule_handler
 from src.handlers.start import start_handler
 from src.handlers.voice import voice_handler
 from src.summarizer import summarize_all_contacts
@@ -68,6 +69,12 @@ async def post_init(application: Application) -> None:
     await init_db()
     await memory.setup()
     logger.info("Database initialized (memory system ready)")
+
+    # Attach the database log handler so all WARNING+ records are persisted
+    from src.core.db.log_handler import DatabaseLogHandler
+
+    logging.getLogger().addHandler(DatabaseLogHandler())
+    logger.info("Database log handler attached (WARNING+ → app_logs)")
 
     # Restore persistent state from DB
     await load_all_states()
@@ -245,6 +252,9 @@ def main() -> None:
     app.add_handler(CommandHandler("relationship", relationship_handler))
     app.add_handler(CommandHandler("contacts", contacts_handler))
     app.add_handler(CommandHandler("skills", skills_handler))
+    app.add_handler(CommandHandler("jobs", jobs_handler))
+    app.add_handler(CommandHandler("cancel", cancel_handler))
+    app.add_handler(CommandHandler("schedule", schedule_handler))
 
     # Message handler for all non-command text (including forwarded)
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, chat_handler))

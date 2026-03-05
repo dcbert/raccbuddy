@@ -62,6 +62,7 @@ class Settings(BaseSettings):
     xai_enable_builtin_tools: bool = False
     xai_temperature: float = 0.7
     xai_max_tokens: int = 8192
+    xai_max_retries: int = 3  # Retry on transient gRPC errors (stale h2 connections)
 
     # ------------------------------------------------------------------ #
     # Context / Token limits
@@ -131,7 +132,7 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------------ #
     # Tool calling
     # ------------------------------------------------------------------ #
-    max_tool_rounds: int = 10
+    max_tool_rounds: int = 5
 
     # ------------------------------------------------------------------ #
     # Agentic proactive core (opt-in)
